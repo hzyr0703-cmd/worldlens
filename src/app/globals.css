@@ -1,0 +1,536 @@
+@import "tailwindcss";
+
+/* ============================================================
+   WorldLens — Editorial Light System
+   设计参照 Mobbin 的设计语言：
+   近白中性底 · 超大编辑排版 · 分类卡片墙 · 克制阴影 · 单一强调色
+   唯一强调色：Signal Cyan #00B8D4（继承霓虹青的血统，压暗以适配浅底）
+   ============================================================ */
+
+:root {
+  --bg: #ffffff;
+  --bg-sunk: #f7f7f8;
+  --surface: #ffffff;
+  --line: #ececee;
+  --line-soft: #f4f4f5;
+  --ink: #0a0a0b;
+  --ink-2: #56565d;
+  --ink-3: #8b8b95;
+  --accent: #00b8d4;
+  --accent-ink: #007a8c;
+  --accent-wash: #e6f7fa;
+  --hot: #e8447f;
+  --up: #d92b3c; /* 红涨 */
+  --down: #0f9d63; /* 绿跌 */
+  --t0: #d92b3c;
+  --t1: #b8720c;
+  --t2: #0071a8;
+  --t3: #71717a;
+
+  --duration-quick: 140ms;
+  --duration-fast: 220ms;
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* zinc 语义色重映射：既有页面的 zinc-* 类自动切到浅底可读 */
+@theme {
+  --color-zinc-50: #ffffff;
+  --color-zinc-100: #fafafa;
+  --color-zinc-200: #f4f4f5;
+  --color-zinc-300: #e8e8ea;
+  --color-zinc-400: #8b8b95;
+  --color-zinc-500: #71717a;
+  --color-zinc-600: #52525b;
+  --color-zinc-700: #3f3f46;
+  --color-zinc-800: #27272a;
+  --color-zinc-900: #18181b;
+  --color-zinc-950: #09090b;
+  --color-purple-50: #fdf2f7;
+  --color-purple-100: #fce7f1;
+  --color-purple-300: #c92a63;
+  --color-purple-400: #e8447f;
+  --color-purple-500: #e8447f;
+  --color-purple-600: #d61f60;
+  --color-purple-700: #b3164f;
+  --color-purple-800: #8c1240;
+  --color-purple-900: #6b0e31;
+  --color-blue-50: #eff9fc;
+  --color-blue-100: #dff2f8;
+  --color-blue-300: #0086a3;
+  --color-blue-600: #00b8d4;
+  --color-blue-800: #007a8c;
+  --color-amber-400: #d99a06;
+  --color-amber-600: #b8720c;
+}
+
+html {
+  color-scheme: light;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(0, 184, 212, 0.22);
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #d8d8dc; border-radius: 6px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: #c2c2c8; background-clip: content-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.mono {
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ── 卡片：白底 + 极轻阴影 + 悬停抬升 ── */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  transition: border-color var(--duration-fast) var(--ease-smooth-out),
+    transform var(--duration-fast) var(--ease-smooth-out),
+    box-shadow var(--duration-fast) var(--ease-smooth-out);
+}
+.panel:hover {
+  border-color: #dcdce0;
+  box-shadow: 0 14px 34px -20px rgba(10, 10, 11, 0.28);
+}
+
+/* ── 主按钮：唯一强调色 ── */
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 999px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: transform var(--duration-fast) var(--ease-smooth-out),
+    box-shadow var(--duration-fast) var(--ease-smooth-out);
+}
+.cta:hover { transform: translateY(-1px); box-shadow: 0 8px 20px -10px rgba(24,24,27,0.5); }
+
+.cta-accent {
+  background: var(--accent);
+  color: #fff;
+}
+.cta-accent:hover { box-shadow: 0 8px 22px -10px rgba(0,184,212,0.75); }
+
+.ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  border-radius: 999px;
+  padding: 8px 15px;
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: border-color var(--duration-fast) var(--ease-smooth-out),
+    color var(--duration-fast) var(--ease-smooth-out);
+}
+.ghost:hover { border-color: var(--ink-3); color: var(--ink); }
+
+/* ── pill 筛选 ── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all var(--duration-quick) var(--ease-smooth-out);
+}
+.pill:hover { border-color: var(--ink-3); color: var(--ink); }
+.pill-active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+.pill-active:hover { color: #fff; }
+
+/* ── 来源/类型标签 ── */
+.tag {
+  display: inline-block;
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 4px 7px;
+  border-radius: 5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+}
+.tier-0 { color: var(--t0); background: #fdeef0; border-color: #f8d7dc; }
+.tier-1 { color: var(--t1); background: #fdf4e6; border-color: #f6e3c4; }
+.tier-2 { color: var(--t2); background: #eaf4f9; border-color: #cfe6f0; }
+.tier-3 { color: var(--t3); background: #f2f2f4; border-color: #e4e4e7; }
+
+.tag-accent { color: var(--accent-ink); background: var(--accent-wash); border-color: #c9eef4; }
+
+.polarity-up { color: var(--up); }
+.polarity-down { color: var(--down); }
+
+/* ── 强调卡：用于最重要的行动号召 ── */
+.neon-card {
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbfc 100%);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset;
+}
+.neon-card:hover { box-shadow: 0 14px 34px -22px rgba(0, 184, 212, 0.55); }
+
+.grad-text {
+  background: linear-gradient(92deg, var(--accent-ink) 0%, var(--ink) 55%, var(--hot) 130%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.neon-line { height: 1px; background: var(--line); }
+
+.stat-glow { color: var(--accent-ink); }
+
+/* ── 入场 ── */
+@keyframes reveal-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.reveal { animation: reveal-up 460ms var(--ease-smooth-out) backwards; }
+.reveal-1 { animation-delay: 40ms; }
+.reveal-2 { animation-delay: 80ms; }
+.reveal-3 { animation-delay: 120ms; }
+.reveal-4 { animation-delay: 160ms; }
+.reveal-5 { animation-delay: 200ms; }
+.reveal-6 { animation-delay: 240ms; }
+
+/* 卡片墙：轻微的错峰入场 */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+.card-in { animation: card-in 520ms var(--ease-smooth-out) backwards; }
+
+/* ============================================================
+   Hero 图标矩阵：无缝纵向 marquee
+   ============================================================ */
+.marquee {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 9%, #000 91%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 9%, #000 91%, transparent 100%);
+}
+.marquee-track {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  animation: marquee-up var(--dur, 46s) linear infinite;
+}
+.marquee-down .marquee-track {
+  animation-name: marquee-down;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+@keyframes marquee-up {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
+@keyframes marquee-down {
+  from { transform: translateY(-50%); }
+  to { transform: translateY(0); }
+}
+
+/* 彩色矩阵方块：品牌化渐变底 + 悬停微放大 */
+.tile {
+  border-radius: 14px;
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 96px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  transition: transform var(--duration-fast) var(--ease-smooth-out),
+    box-shadow var(--duration-fast) var(--ease-smooth-out),
+    min-height var(--duration-slow) var(--ease-smooth-out);
+}
+/* 桌面 6 列时进一步加高，让方块保持接近正方的比例 */
+@media (min-width: 1024px) {
+  .tile { min-height: 132px; padding: 14px 15px; }
+  .tile .text-\[15px\] { font-size: 16px; }
+  .tile .text-\[10px\] { font-size: 11px; }
+}
+.tile:hover {
+  transform: scale(1.045);
+  box-shadow: 0 10px 22px -12px rgba(24, 24, 27, 0.45);
+  z-index: 2;
+  position: relative;
+}
+
+/* ============================================================
+   Hero 动效层
+   ============================================================ */
+
+/* 逐行遮罩上推：父级 overflow hidden，子级从下方推出 */
+@keyframes hero-line-in {
+  from { transform: translateY(105%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.hero-line {
+  animation: hero-line-in 900ms var(--ease-smooth-out) backwards;
+  animation-delay: var(--d, 0ms);
+}
+
+@keyframes hero-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.hero-kicker {
+  animation: hero-fade 700ms var(--ease-smooth-out) backwards;
+}
+
+@keyframes hero-ping {
+  0% { transform: scale(1); opacity: 0.7; }
+  70%, 100% { transform: scale(3.2); opacity: 0; }
+}
+.hero-ping { animation: hero-ping 2.6s var(--ease-smooth-out) infinite; }
+
+/* 矩阵整体缓入 */
+@keyframes hero-matrix-in {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: none; }
+}
+.hero-matrix { animation: hero-matrix-in 1100ms var(--ease-smooth-out) 260ms backwards; }
+
+/* 渐变文字流光 —— 已停用：整段扫色过于张扬，改为单色强调（见 Hero 第二行） */
+
+/* 按钮箭头微推 */
+.hero-arrow {
+  display: inline-block;
+  transition: transform var(--duration-fast) var(--ease-smooth-out);
+}
+.cta:hover .hero-arrow { transform: translateX(3px); }
+
+/* 数据条分隔点 */
+.hero-dot {
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: #d4d4d8;
+}
+
+/* ============================================================
+   画龙点睛：三处克制型微动效
+   ============================================================ */
+
+/* ① 标题下方的青色短线，从中心向两侧展开 */
+.hero-rule {
+  display: block;
+  width: 88px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, #00b8d4, transparent);
+  transform-origin: center;
+  animation: hero-rule 1000ms var(--ease-smooth-out) 520ms backwards;
+}
+@keyframes hero-rule {
+  from { transform: scaleX(0); opacity: 0; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+/* ② 彩色方块逐块错峰入场（配合矩阵整体缓入） */
+@keyframes tile-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+.tile-in {
+  animation: tile-in 620ms var(--ease-smooth-out) backwards;
+  animation-delay: calc(var(--d, 0ms) + 320ms);
+}
+/* 悬停放大需覆盖入场动画的 transform，二者叠加时优先悬停 */
+.tile.tile-in:hover { animation: none; }
+
+/* ③ 数据条：数字入场时轻微上浮，与分隔点形成呼吸感 */
+.hero-line .mono.tabular-nums {
+  display: inline-block;
+  animation: hero-fade 620ms var(--ease-smooth-out) backwards;
+}
+.hero-line .mono.tabular-nums:nth-of-type(1) { animation-delay: 520ms; }
+.hero-line .mono.tabular-nums:nth-of-type(2) { animation-delay: 620ms; }
+.hero-line .mono.tabular-nums:nth-of-type(3) { animation-delay: 720ms; }
+
+/* ============================================================
+   下方区块：滚动进入视口才动
+   ============================================================ */
+.reveal-scope > * {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 700ms var(--ease-smooth-out), transform 700ms var(--ease-smooth-out);
+}
+.reveal-scope.in > * {
+  opacity: 1;
+  transform: none;
+}
+.reveal-scope.in > *:nth-child(1) { transition-delay: 0ms; }
+.reveal-scope.in > *:nth-child(2) { transition-delay: 70ms; }
+.reveal-scope.in > *:nth-child(3) { transition-delay: 140ms; }
+.reveal-scope.in > *:nth-child(4) { transition-delay: 210ms; }
+.reveal-scope.in > *:nth-child(5) { transition-delay: 280ms; }
+.reveal-scope.in > *:nth-child(6) { transition-delay: 350ms; }
+
+/* JS 不可用时不要把内容藏起来 */
+@media (scripting: none) {
+  .reveal-scope > * { opacity: 1; transform: none; }
+}
+
+/* ── 编辑排版：区块序号大数字 ── */
+.sec-index {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: #8b8b95;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 章节细分隔线 */
+.rule {
+  height: 1px;
+  background: linear-gradient(90deg, #ececee, transparent);
+}
+
+/* ============================================================
+   内页统一体系
+   ============================================================ */
+
+/* 内页页头入场：序号 → 标题 → 描述 依次上浮 */
+@keyframes page-head-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+.page-head > * {
+  animation: page-head-in 640ms var(--ease-smooth-out) backwards;
+}
+.page-head > *:nth-child(1) { animation-delay: 0ms; }
+.page-head > *:nth-child(2) { animation-delay: 70ms; }
+.page-head > *:nth-child(3) { animation-delay: 140ms; }
+
+/* 内页内容区错峰入场 */
+.page-body > * {
+  animation: page-head-in 700ms var(--ease-smooth-out) backwards;
+}
+.page-body > *:nth-child(1) { animation-delay: 120ms; }
+.page-body > *:nth-child(2) { animation-delay: 190ms; }
+.page-body > *:nth-child(3) { animation-delay: 260ms; }
+.page-body > *:nth-child(4) { animation-delay: 330ms; }
+
+/* 列表行悬停：左侧青色标记条滑入（对应 Mobbin 列表卡的 hover 反馈） */
+.row {
+  position: relative;
+  transition: background-color var(--duration-fast) var(--ease-smooth-out);
+}
+.row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform var(--duration-fast) var(--ease-smooth-out);
+}
+.row:hover { background: #fbfbfc; }
+.row:hover::before { transform: scaleY(1); }
+
+/* 空状态：柔和居中，不用虚线框 */
+.empty {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: #fcfcfd;
+  padding: 56px 32px;
+  text-align: center;
+}
+
+/* 表单控件：与 pill 语言一致的圆角与焦点环 */
+.field {
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 15px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  transition: border-color var(--duration-fast) var(--ease-smooth-out),
+    box-shadow var(--duration-fast) var(--ease-smooth-out);
+}
+.field::placeholder { color: #a1a1aa; }
+.field:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 184, 212, 0.14);
+}
+
+/* 主行动按钮在浅底上的强调版 */
+.btn-solid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 999px;
+  padding: 11px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: transform var(--duration-fast) var(--ease-smooth-out),
+    box-shadow var(--duration-fast) var(--ease-smooth-out),
+    opacity var(--duration-fast) var(--ease-smooth-out);
+}
+.btn-solid:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px -12px rgba(10, 10, 11, 0.6);
+}
+.btn-solid:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+/* ── 正文阅读排版：网站的灵魂 ── */
+.read-body {
+  white-space: pre-wrap;
+  font-size: 17px;
+  line-height: 1.95;
+  letter-spacing: -0.003em;
+  color: #1f1f23;
+}
+@media (min-width: 640px) {
+  .read-body { font-size: 17.5px; line-height: 2.0; }
+}
+
+/* ── 提问区：大字留白，像真的在问你 ── */
+.ask {
+  font-size: 21px;
+  line-height: 1.5;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+}
+
+
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
