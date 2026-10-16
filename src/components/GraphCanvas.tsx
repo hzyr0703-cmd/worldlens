@@ -223,6 +223,10 @@ export default function GraphCanvas() {
   );
   useForceLayout(svgRef, atomNodes, atomEdges, mode === "atoms");
 
+  const atomMap = useMemo(() => new Map(atomNodes.map((n) => [n.id, n])), [atomNodes]);
+  const atomEdgesOf = (id: number) =>
+    (atomData?.edges ?? []).filter((e) => e.src_id === id || e.dst_id === id);
+
   if (loading) {
     return (
       <div className="shimmer relative overflow-hidden rounded-2xl">
@@ -242,10 +246,6 @@ export default function GraphCanvas() {
       </div>
     );
   }
-
-  const atomMap = useMemo(() => new Map(atomNodes.map((n) => [n.id, n])), [atomNodes]);
-  const atomEdgesOf = (id: number) =>
-    (atomData?.edges ?? []).filter((e) => e.src_id === id || e.dst_id === id);
 
   /* ---- 空态 ---- */
   const hasEntities = (entityData?.nodes.length ?? 0) > 0;
