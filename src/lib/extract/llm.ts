@@ -83,3 +83,33 @@ export function llmStatsToday(): { calls: number; fails: number; avgMs: number }
     return { calls: 0, fails: 0, avgMs: 0 };
   }
 }
+
+/** JSON 数组容错解析：LLM 偶发在 JSON 前后加杂质（markdown 围栏/解释文字），
+ *  贪婪正则会被文字里的 "]" 截断。策略：直接 parse → 围栏提取 → 渐进收缩 [ 起点/ ] 终点。 */
+export function parseJsonArray<T>(text: string): T[] {
+  const tryParse = (s: string): T[] | null => {
+    try {
+      const v = JSON.parse(s);
+      return Array.isArray(v) ? (v as T[]) : null;
+    } catch {
+      return null;
+    }
+  };
+  const direct = tryParse(text.trim());
+  if (direct) return direct;
+
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) {
+    const r = tryParse(fence[1].trim());
+    if (r) return r;
+  }
+
+  const start = text.indexOf("[");
+  const end = text.lastIndexOf("]");
+  if (start === -1 || end === -1 || end <= start) return [];
+  for (let e = end; e > start && end - e < 4000; e--) {
+    const r = tryParse(text.slice(start, e + 1));
+    if (r) return r;
+  }
+  return [];
+}

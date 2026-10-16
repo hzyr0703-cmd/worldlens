@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db";
-import { chat } from "@/lib/extract/llm";
+import { chat, parseJsonArray } from "@/lib/extract/llm";
 
 // ---------------------------------------------------------------------------
 // v5 拷问式精读引擎
@@ -19,16 +19,6 @@ type QuizRow = {
 
 const NUGGET_TYPES = ["mechanism", "pattern", "fact", "counterexample", "judgment", "question", "norm"] as const;
 const DOMAINS = ["finance", "ai", "tech"] as const;
-
-function parseJsonArray<T>(text: string): T[] {
-  const m = text.match(/\[[\s\S]*\]/);
-  if (!m) return [];
-  try {
-    return JSON.parse(m[0]) as T[];
-  } catch {
-    return [];
-  }
-}
 
 /** JSON 解析失败自动重试一次（温度略升打碎确定性格式错） */
 async function chatJson<T>(
@@ -97,26 +87,37 @@ export async function generateQuiz(articleId: number): Promise<number> {
 
   const source = article.refined?.trim().length >= 300 ? article.refined : await refineArticle(articleId);
 
-  const questions = await chatJson<{ q_order?: number; question?: string; expects?: string }>(
-    `你是严苛的阅读考官。针对文章出 4-6 道简答题，考察读者是否真正理解了文章：
+  // LLM 偶发短输出（1 题）或解析杂质——不足 4 题自动补题，最多 3 轮
+  const questions: { q_order?: number; question?: string; expects?: string }[] = [];
+  for (let round = 0; round < 3 && questions.length < 4; round++) {
+    const batch = await chatJson<{ q_order?: number; question?: string; expects?: string }>(
+      `你是严苛的阅读考官。针对文章出 ${round === 0 ? "4-6" : "4"} 道简答题，考察读者是否真正理解了文章：
 1. 覆盖核心论点、关键机制/因果链、数据锚点、适用条件或反例
 2. 问题必须凭记忆作答才有意义（不要能从问题字面直接抄出答案的问题）
 3. 全部用简体中文出题（无论原文语言）
 4. expects 字段写下你认为的完整答案要点（阅卷对照用，读者不可见），也用简体中文
+${round > 0 ? `注意：上一轮出题不足，这轮请务必输出完整的 4 题。已有题目（不要重复）：${questions.map((q) => q.question).join("；")}` : ""}
 只输出 JSON 数组：[{"q_order":1,"question":"...","expects":"..."}]`,
-    `标题: ${article.title}\n\n正文(精炼稿):\n${source}`,
-    { maxTokens: 4096, temperature: 0.3, purpose: "generate_quiz" }
-  );
-
-  const filtered = questions.filter((q) => q.question).slice(0, 6);
+      `标题: ${article.title}\n\n正文(精炼稿):\n${source}`,
+      { maxTokens: 4096, temperature: round === 0 ? 0.3 : 0.45, purpose: round === 0 ? "generate_quiz" : "generate_quiz_retry" }
+    );
+    const seen = new Set(questions.map((q) => q.question));
+    for (const q of batch) {
+      if (q.question && !seen.has(q.question)) {
+        questions.push(q);
+        seen.add(q.question);
+      }
+      if (questions.length >= 6) break;
+    }
+  }
 
   const ins = db.prepare(
     `INSERT INTO quizzes (article_id, q_order, question, expects) VALUES (?, ?, ?, ?)`
   );
-  filtered.forEach((q, i) => ins.run(articleId, q.q_order ?? i + 1, q.question!, q.expects ?? ""));
+  questions.forEach((q, i) => ins.run(articleId, q.q_order ?? i + 1, q.question!, q.expects ?? ""));
 
   db.prepare(`UPDATE articles SET quizzed = 1 WHERE id = ?`).run(articleId);
-  return filtered.length;
+  return questions.length;
 }
 
 /** 解析阅卷 META 行：【META】type=mechanism|domain=finance|pass=1 */

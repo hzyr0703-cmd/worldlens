@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db";
-import { chat, llmEnabled } from "@/lib/extract/llm";
+import { chat, llmEnabled, parseJsonArray } from "@/lib/extract/llm";
 
 // ---------------------------------------------------------------------------
 // 认知蒸馏引擎 v3 — 信息易逝，认知原子沉淀。
@@ -68,16 +68,6 @@ type RawNugget = {
   confidence?: number;
   source_ids?: number[];
 };
-
-function parseJsonArray<T>(text: string): T[] {
-  const m = text.match(/\[[\s\S]*\]/);
-  if (!m) return [];
-  try {
-    return JSON.parse(m[0]) as T[];
-  } catch {
-    return [];
-  }
-}
 
 /** 语句切 bigram，算 Jaccard 重合度 */
 function bigrams(s: string): Set<string> {
