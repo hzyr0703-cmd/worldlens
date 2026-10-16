@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { wlFetch } from "@/lib/client/fetch";
 
 /** 原子管理：编辑 / 退役 / 合并（认知资产必须可治理） */
 export default function NuggetActions({ id, statement }: { id: number; statement: string }) {
@@ -12,7 +13,7 @@ export default function NuggetActions({ id, statement }: { id: number; statement
 
   async function save() {
     setBusy(true);
-    await fetch("/api/nuggets", {
+    await wlFetch("/api/nuggets", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, statement: text }),
@@ -25,7 +26,7 @@ export default function NuggetActions({ id, statement }: { id: number; statement
   async function retire() {
     if (!confirm("退役这条原子？它将不再出现在库和复习队列（可从日志追溯）。")) return;
     setBusy(true);
-    await fetch("/api/nuggets", {
+    await wlFetch("/api/nuggets", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
@@ -57,6 +58,25 @@ export default function NuggetActions({ id, statement }: { id: number; statement
           </button>
           <button onClick={retire} disabled={busy} className="text-[12px] text-zinc-400 hover:text-[#b4232f] transition-colors">
             退役
+          </button>
+          <button
+            onClick={async () => {
+              const target = prompt(`把本条合并进哪条原子？输入目标原子 ID：`);
+              if (!target?.trim()) return;
+              setBusy(true);
+              await wlFetch("/api/nuggets", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ keepId: Number(target.trim()), mergeId: id }),
+              });
+              setBusy(false);
+              router.refresh();
+            }}
+            disabled={busy}
+            className="text-[12px] text-zinc-400 hover:text-[#8a5a08] transition-colors"
+            title="本条退役、连边迁移到目标原子"
+          >
+            合并到…
           </button>
         </>
       )}

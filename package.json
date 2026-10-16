@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sync": "node scripts/backup.mjs export https://worldlens-collector.app.workbuddy.host backups/online-latest.json && node scripts/backup.mjs import backups/online-latest.json",
+    "predeploy": "npm run sync && npm run build"
   },
   "dependencies": {
     "next": "16.4.0",

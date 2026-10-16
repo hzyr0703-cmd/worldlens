@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { wlFetch } from "@/lib/client/fetch";
 
 type Quiz = {
   id: number;
@@ -39,7 +40,7 @@ export function QuizRunner({ articleId, quizzes }: { articleId: number; quizzes:
     setBusy(true);
     setError("");
     try {
-      const res = await fetch("/api/quiz", {
+      const res = await wlFetch("/api/quiz", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "answer", quizId: current.id, answer }),
@@ -65,7 +66,7 @@ export function QuizRunner({ articleId, quizzes }: { articleId: number; quizzes:
     setBusy(true);
     setError("");
     try {
-      const res = await fetch("/api/quiz", {
+      const res = await wlFetch("/api/quiz", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "digest", articleId }),
@@ -83,16 +84,16 @@ export function QuizRunner({ articleId, quizzes }: { articleId: number; quizzes:
 
   if (digested) {
     return (
-      <div className="panel p-10 text-center">
+      <div className="panel p-10 text-center panel-in">
         <p className="text-[17px] font-semibold tracking-[-0.015em]">本次精读沉淀完成</p>
         <p className="text-[14px] text-zinc-500 mt-3 leading-relaxed">
           {digested.nuggets} 个认知原子已入库（带着你的原话与修正差异）· {digested.cards} 张复习卡片已进入 FSRS 队列{digested.skipped > 0 ? ` · ${digested.skipped} 条判定为日常信息未沉淀` : ""}
         </p>
         <div className="flex flex-wrap justify-center gap-3 mt-7">
-          <a href="/review" className="btn-solid">
+          <a href="/review" className="btn-solid magnetic">
             开始第一次复习 →
           </a>
-          <a href="/inbox" className="ghost">下一篇</a>
+          <a href="/inbox" className="ghost magnetic">下一篇</a>
         </div>
       </div>
     );
@@ -100,11 +101,11 @@ export function QuizRunner({ articleId, quizzes }: { articleId: number; quizzes:
 
   if (done) {
     return (
-      <div className="panel p-10 text-center">
+      <div className="panel p-10 text-center panel-in">
         <p className="text-[17px] font-semibold tracking-[-0.015em]">全部题目已作答</p>
         <p className="text-[13.5px] text-zinc-500 mt-2.5">现在把你的表述沉淀成认知原子，进入复习队列。</p>
         <div className="mt-7">
-          <button onClick={digest} disabled={busy} className="btn-solid">
+          <button onClick={digest} disabled={busy} className="btn-solid magnetic">
             {busy ? "沉淀中…" : "沉淀为本章认知原子"}
           </button>
         </div>
@@ -119,13 +120,18 @@ export function QuizRunner({ articleId, quizzes }: { articleId: number; quizzes:
         {quizzes.map((q, i) => (
           <span
             key={q.id}
-            className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
-              q.state === "answered" ? "bg-[#007a8c]" : i === idx ? "bg-[#00b8d4]" : "bg-zinc-200"
+            className={`h-1 flex-1 rounded-full transition-all duration-500 ${
+              q.state === "answered"
+                ? "bg-[#007a8c]"
+                : i === idx
+                  ? "bg-[#00b8d4] scale-y-[1.6]"
+                  : "bg-zinc-200"
             }`}
           />
         ))}
       </div>
-      <div className="panel p-7 sm:p-8">
+      {/* key={current.id}：换题时整卡推入，和复习页同一套转场 */}
+      <div className="panel p-7 sm:p-8 card-swap" key={current.id}>
         <div className="sec-index mono">
           Question {idx + 1} / {quizzes.length} · 凭记忆作答，不要回看
         </div>
@@ -140,12 +146,12 @@ export function QuizRunner({ articleId, quizzes }: { articleId: number; quizzes:
               placeholder="用你自己的话写下来——提取困难恰恰是记忆发生的时刻"
               className="field resize-y"
             />
-            <button onClick={submit} disabled={busy} className="btn-solid">
+            <button onClick={submit} disabled={busy} className="btn-solid magnetic">
               {busy ? "阅卷中…" : "提交答卷 →"}
             </button>
           </div>
         ) : (
-          <div className="mt-6 space-y-4">
+          <div className="mt-6 space-y-4 reveal-answer">
             <div className="bg-[#fbfbfc] border border-zinc-200 rounded-2xl p-5">
               <div className="sec-index mono mb-2">你的回答</div>
               <p className="text-[14px] text-zinc-700 whitespace-pre-wrap leading-relaxed">{answer || "（空白）"}</p>
@@ -154,7 +160,7 @@ export function QuizRunner({ articleId, quizzes }: { articleId: number; quizzes:
               <div className="text-[11px] tracking-[0.14em] uppercase text-[#007a8c] font-medium mb-2">阅卷 · 对照原文</div>
               <p className="text-[14px] text-zinc-800 whitespace-pre-wrap leading-relaxed">{verdict}</p>
             </div>
-            <button onClick={next} className="btn-solid">
+            <button onClick={next} className="btn-solid magnetic">
               下一题 →
             </button>
           </div>

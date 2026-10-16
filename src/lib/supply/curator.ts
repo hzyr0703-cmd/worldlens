@@ -117,6 +117,7 @@ export async function curateFeed(feed: FeedDef): Promise<SupplyResult> {
           continue; // 抓取失败跳过，不阻塞其他条目
         }
       }
+      // 供给源默认 official（官方/媒体），口述类只走手动投喂
       if (body.length < 500) continue;
       if (!title) title = body.slice(0, 40);
       if (keywords.length > 0 && !keywords.some((k) => title.includes(k) || body.slice(0, 600).includes(k))) {

@@ -8,14 +8,14 @@ import { chat, llmEnabled } from "@/lib/extract/llm";
 //      → 印证上调置信 / 矛盾触发修正 → worldview_log
 // ---------------------------------------------------------------------------
 
-const NUGGET_TYPES = ["mechanism", "pattern", "fact", "counterexample", "judgment", "question"] as const;
+const NUGGET_TYPES = ["mechanism", "pattern", "fact", "counterexample", "judgment", "question", "norm"] as const;
 type NuggetType = (typeof NUGGET_TYPES)[number];
 
 const RELATIONS = ["supports", "contradicts", "explains", "extends", "analogy"] as const;
 
 const TYPE_CN: Record<string, string> = {
   mechanism: "机制", pattern: "模式", fact: "硬事实",
-  counterexample: "反例", judgment: "判断", question: "开放问题",
+  counterexample: "反例", judgment: "判断", question: "开放问题", norm: "潜规则",
 };
 
 const DISTILL_SYSTEM = `你是认知蒸馏引擎。输入是若干条财经/AI 领域的实时信息，你的任务不是摘要新闻，而是提炼"认知原子"——值得长期保存、可跨场景复用的理解单元。
@@ -27,13 +27,14 @@ const DISTILL_SYSTEM = `你是认知蒸馏引擎。输入是若干条财经/AI �
 - counterexample 反例：某规律失效的案例（最值钱的原子，遇到必收）
 - judgment 判断：带置信度的前瞻预测，未来信息可验证/证伪
 - question 开放问题：当前无法回答、值得后续信息追查的问题
+- norm 潜规则：行业/体制内不成文但真实生效的行为惯例——格式「谁—在什么场景—默认怎么做—为什么—违反成本」（如：A股公司亏损年份倾向洗大澡，为次年扭亏保壳）
 
 纪律：
 1. statement 与 elaboration 必须用简体中文输出（即使信息原文是英文）
 2. 宁缺毋滥——只收真正有长期价值的理解，日常波动、重复信息、纯事件报道不收
 2. statement 必须是一句自足的话（脱离原文也能看懂），包含关键数字与主体
 3. elaboration 补充机制解释或上下文，1-3 句
-4. confidence: fact/mechanism 0.7-0.9, judgment 0.4-0.6, question 0.5
+4. confidence: fact/mechanism/norm 0.7-0.9, judgment 0.4-0.6, question 0.5
 5. source_ids 填入支撑该原子的信息 id 数组
 6. 只输出 JSON 数组，无原子输出 []，禁止任何其他文字
 
@@ -96,16 +97,31 @@ function findDuplicate(statement: string): { id: number } | null {
   const db = getDb();
   const terms = statement.replace(/[，。、：；！？\s]/g, " ").split(" ").filter((w) => w.length >= 2).slice(0, 8);
   if (terms.length === 0) return null;
-  let candidates: { id: number; statement: string }[] = [];
+  // trigram 分词器只能 MATCH ≥3 字符；2 字词（"利率""光模块"）走 LIKE 兜底，两路合并
+  const longTerms = terms.filter((t) => t.length >= 3);
+  const shortTerms = terms.filter((t) => t.length < 3);
+  const seen = new Set<number>();
+  const candidates: { id: number; statement: string }[] = [];
   try {
-    candidates = db
-      .prepare(
-        `SELECT n.id, n.statement FROM nuggets n
-         JOIN nuggets_fts f ON n.id = f.rowid
-         WHERE nuggets_fts MATCH ?
-         ORDER BY rank LIMIT 3`
-      )
-      .all(terms.map((t) => `"${t}"`).join(" OR ")) as unknown as { id: number; statement: string }[];
+    if (longTerms.length) {
+      const match = longTerms.map((t) => `"${t}"`).join(" OR ");
+      const rows = db
+        .prepare(
+          `SELECT n.id, n.statement FROM nuggets n
+           JOIN nuggets_fts f ON n.id = f.rowid
+           WHERE nuggets_fts MATCH ?
+           ORDER BY rank LIMIT 4`
+        )
+        .all(match) as unknown as { id: number; statement: string }[];
+      for (const r of rows) if (!seen.has(r.id)) { seen.add(r.id); candidates.push(r); }
+    }
+    if (shortTerms.length && candidates.length < 4) {
+      const like = shortTerms.map(() => `statement LIKE ?`).join(" OR ");
+      const rows = db
+        .prepare(`SELECT id, statement FROM nuggets WHERE (${like}) LIMIT 4`)
+        .all(...shortTerms.map((t) => `%${t}%`)) as unknown as { id: number; statement: string }[];
+      for (const r of rows) if (!seen.has(r.id)) { seen.add(r.id); candidates.push(r); }
+    }
   } catch {
     return null;
   }
@@ -141,12 +157,9 @@ export async function distillDaily(date?: string): Promise<DistillResult> {
     )
     .all(d) as unknown as { id: number; title: string; content: string; tier: number }[];
 
-  const corpus = rows
-    .map((r) => `[id:${r.id}|T${r.tier}] ${r.title} —— ${r.content.slice(0, 200)}`)
-    .join("\n");
-
   const BATCH = 25;
   const newIds: number[] = [];
+  const newJudgments: { nid: number; statement: string }[] = [];
 
   for (let i = 0; i < Math.min(rows.length, 120); i += BATCH) {
     const chunk = rows.slice(i, i + BATCH);
@@ -198,6 +211,7 @@ export async function distillDaily(date?: string): Promise<DistillResult> {
           d
         ) as unknown as { lastInsertRowid: number | bigint };
       newIds.push(Number(info.lastInsertRowid));
+      if (c.type === "judgment") newJudgments.push({ nid: Number(info.lastInsertRowid), statement: c.statement });
       result.created++;
       db.prepare(
         `INSERT INTO worldview_log (nugget_id, action, detail, batch_date) VALUES (?, 'created', ?, ?)`
@@ -207,6 +221,16 @@ export async function distillDaily(date?: string): Promise<DistillResult> {
     db.prepare(
       `UPDATE items SET distilled = 1 WHERE id IN (${chunk.map(() => "?").join(",")})`
     ).run(...chunk.map((r) => r.id));
+  }
+
+  // ---- Step 1.5: judgment 原子生成预测对账卡 ----
+  if (newJudgments.length > 0) {
+    try {
+      const { ensureVerifications } = await import("@/lib/verify/ledger");
+      await ensureVerifications(newJudgments);
+    } catch {
+      /* 对账生成失败不阻塞 */
+    }
   }
 
   // ---- Step 2: 连边 + 修正循环 ----

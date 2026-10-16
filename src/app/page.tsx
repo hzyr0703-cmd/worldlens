@@ -1,7 +1,9 @@
 import { getDb } from "@/lib/db";
+import { getLiveTiles } from "@/lib/tiles";
 import { llmStatsToday } from "@/lib/extract/llm";
-import { pendingCount } from "@/lib/review/fsrs";
+import { pendingCount, pendingVerifyCount } from "@/lib/review/fsrs";
 import { ActionsBar } from "@/components/ActionsBar";
+import CountUp from "@/components/CountUp";
 import Hero from "@/components/Hero";
 import Reveal from "@/components/Reveal";
 
@@ -26,7 +28,7 @@ function SectionHead({ index, kicker, title, href, linkText }: {
         <span className="h-px w-8 bg-zinc-300" />
         <span className="sec-index mono uppercase tracking-[0.16em]">{kicker}</span>
         {href && (
-          <a href={href} className="pill ml-auto shrink-0">
+          <a href={href} className="pill ml-auto shrink-0 magnetic">
             {linkText ?? "查看全部"}
           </a>
         )}
@@ -41,6 +43,7 @@ function SectionHead({ index, kicker, title, href, linkText }: {
 export default function Home() {
   const db = getDb();
   const due = pendingCount();
+  const verifyDue = pendingVerifyCount();
   const llm = llmStatsToday();
   const sources = (
     db.prepare(`SELECT name FROM sources WHERE enabled = 1 ORDER BY tier, id`).all() as unknown as { name: string }[]
@@ -60,12 +63,6 @@ export default function Home() {
     articles: number; items: number; cards: number;
   };
 
-  const typeRows = db
-    .prepare(`SELECT type, COUNT(*) AS c FROM nuggets GROUP BY type`)
-    .all() as unknown as { type: string; c: number }[];
-  const typeCounts: Record<string, number> = {};
-  for (const r of typeRows) typeCounts[r.type] = r.c;
-
   const todayNuggets = db
     .prepare(
       `SELECT id, type, statement, domain, confidence FROM nuggets
@@ -81,6 +78,9 @@ export default function Home() {
     .all() as unknown as {
     id: number; title: string; domain: string; word_count: number; quizzed: number; added_at: string;
   }[];
+
+  // Hero 方块矩阵用：最新快讯（中文为主，英文 ≤4 条），与 /api/live-tiles 同源
+  const latestItems = getLiveTiles();
 
   const queues = [
     {
@@ -119,15 +119,25 @@ export default function Home() {
 
   return (
     <div className="space-y-16 sm:space-y-24 lg:space-y-32">
-      {/* ── Hero：Mobbin 式居中巨型标题 + 彩色方块矩阵 ── */}
+      {/* ── Hero：Mobbin 式居中巨型标题 + 真实快讯方块矩阵 ── */}
+      {verifyDue > 0 && (
+        <a
+          href="/review"
+          className="mb-8 flex items-center gap-3 rounded-2xl border border-[#f0e0c0] bg-[#fdf8ef] px-5 py-3.5 text-[13.5px] text-[#8a5a08] transition-transform duration-200 hover:-translate-y-0.5"
+        >
+          <span className="font-semibold">{verifyDue} 张预测对账卡已到期</span>
+          <span className="text-[#b08a4a]">—— 当初的判断，现在被现实验证了吗？</span>
+          <span className="ml-auto font-medium shrink-0">去结算 →</span>
+        </a>
+      )}
       <Hero
         items={stats.items}
         articles={stats.articles}
         nuggets={stats.nuggets}
         due={due}
-        typeCounts={typeCounts}
         llmCalls={llm.calls}
         sources={sources}
+        latestItems={latestItems}
       />
 
       <div className="mt-12 flex flex-wrap items-center gap-3 justify-center">
@@ -160,7 +170,7 @@ export default function Home() {
             kicker="Queues"
             title="四个队列，构成一次完整训练"
           />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {queues.map((q) => (
               <a key={q.href} href={q.href} className="panel card-in p-5 sm:p-7 flex flex-col min-h-[132px] lg:min-h-[212px] group">
                 <div className="flex items-center justify-between">
@@ -170,7 +180,7 @@ export default function Home() {
                 <p className="text-[13px] leading-[1.7] text-zinc-500 mt-3 sm:mt-4 flex-1">{q.desc}</p>
                 <div className="flex items-end justify-between mt-4">
                   <span className="mono text-[26px] sm:text-[32px] font-semibold tracking-[-0.025em] leading-none tabular-nums">
-                    {q.metric}
+                    <CountUp value={Number(q.metric)} />
                   </span>
                   <span className="text-zinc-300 group-hover:text-[#007a8c] group-hover:translate-x-0.5 transition-all duration-200">
                     →
@@ -197,7 +207,7 @@ export default function Home() {
               <p className="text-[13.5px] text-zinc-500">文章池是空的。点上方「供给今日精读」自动抓取，或去文章池手动投喂。</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="stagger grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {recent.map((a) => (
                 <a
                   key={a.id}
@@ -238,7 +248,7 @@ export default function Home() {
             href="/library"
             linkText="全部原子"
           />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="stagger grid grid-cols-1 md:grid-cols-2 gap-3">
             {todayNuggets.length === 0 ? (
               <div className="panel md:col-span-2 p-10 text-center">
                 <p className="text-[13.5px] text-zinc-500">
@@ -273,6 +283,18 @@ export default function Home() {
                 "radial-gradient(680px 300px at 8% 0%, #00b8d4, transparent 62%), radial-gradient(560px 280px at 100% 100%, #e8447f, transparent 60%)",
             }}
           />
+          {/* 细网格底纹，压在渐变之上增加质感 */}
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.5]"
+            style={{
+              backgroundImage:
+                "linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px)",
+              backgroundSize: "44px 44px",
+              maskImage: "radial-gradient(700px 340px at 50% 0%, #000, transparent 76%)",
+              WebkitMaskImage: "radial-gradient(700px 340px at 50% 0%, #000, transparent 76%)",
+            }}
+            aria-hidden
+          />
           <div className="relative">
             <div className="flex items-center gap-3">
               <span className="sec-index mono text-white/40">04</span>
@@ -285,14 +307,14 @@ export default function Home() {
               阅读不产生认知，<br />
               <span className="text-white/45">回忆才产生认知</span>。
             </h2>
-            <div className="mt-8 sm:mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-7 sm:gap-y-10">
+            <div className="mt-8 sm:mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-7 sm:gap-y-10 stagger">
               {[
                 { n: "01", t: "收集", d: "从 T0–T3 分级信源抓取真实信息与深度长文，去重留证。" },
                 { n: "02", t: "精读", d: "全文可读，不做碎片摘要。原文长度决定理解深度。" },
                 { n: "03", t: "拷问", d: "AI 按认知原子类型出 4–6 道简答题，你必须先答。" },
                 { n: "04", t: "留存", d: "AI 指出对在哪、漏什么，你的表述成为原子并进入 FSRS 复习。" },
               ].map((s) => (
-                <div key={s.n} className="border-t border-white/12 pt-5">
+                <div key={s.n} className="border-t border-white/12 pt-5 card-in">
                   <div className="mono text-[12px] text-[#00b8d4] tabular-nums">{s.n}</div>
                   <div className="text-[17px] font-semibold mt-2.5 tracking-[-0.01em]">{s.t}</div>
                   <p className="text-[13px] leading-relaxed text-zinc-400 mt-2.5">{s.d}</p>

@@ -1,6 +1,7 @@
 import { getDb } from "@/lib/db";
 import PasteArticle from "@/components/PasteArticle";
 import PageHead from "@/components/PageHead";
+import Reveal from "@/components/Reveal";
 import TopicSub from "@/components/TopicSub";
 
 export const dynamic = "force-dynamic";
@@ -57,61 +58,65 @@ export default function InboxPage() {
         />
 
         {articles.length > 0 && (
-          <ul className="panel overflow-hidden">
-            {articles.map((a) => {
-              const inProgress = a.quiz_count > 0 && a.answered < a.quiz_count;
-              return (
-                <li
-                  key={a.id}
-                  className="row px-6 py-5 border-b border-zinc-100 last:border-0 flex items-center gap-4"
-                >
-                  <span className={`tag shrink-0 ${a.domain === "finance" ? "tier-0" : "tier-2"}`}>
-                    {a.domain === "ai" ? "AI" : a.domain === "tech" ? "科技" : "财经"}
-                  </span>
-                  <a
-                    href={`/read/${a.id}`}
-                    className="flex-1 min-w-0 truncate text-[15px] font-medium tracking-[-0.01em] hover:text-[#007a8c] transition-colors duration-200"
-                    title="点击阅读正文"
+          <Reveal variant="rows">
+            <ul className="panel overflow-hidden">
+              {articles.map((a) => {
+                const inProgress = a.quiz_count > 0 && a.answered < a.quiz_count;
+                return (
+                  <li
+                    key={a.id}
+                    className="row row-in px-6 py-5 border-b border-zinc-100 last:border-0 flex items-center gap-4"
                   >
-                    {a.title}
-                  </a>
-                  <span className="mono text-[11px] text-zinc-400 tabular-nums shrink-0">
-                    {a.word_count} 字
-                  </span>
-                  {inProgress ? (
-                    <a href={`/quiz/${a.id}`} className="pill !text-[12px] !py-1.5 !px-3 shrink-0">
-                      继续 {a.answered}/{a.quiz_count}
+                    <span className={`tag shrink-0 ${a.domain === "finance" ? "tier-0" : "tier-2"}`}>
+                      {a.domain === "ai" ? "AI" : a.domain === "tech" ? "科技" : "财经"}
+                    </span>
+                    <a
+                      href={`/read/${a.id}`}
+                      className="flex-1 min-w-0 truncate text-[15px] font-medium tracking-[-0.01em] hover:text-[#007a8c] transition-colors duration-200"
+                      title="点击阅读正文"
+                    >
+                      {a.title}
                     </a>
-                  ) : a.quizzed ? (
-                    <span className="tag tier-3 shrink-0">已沉淀</span>
-                  ) : (
-                    <a href={`/read/${a.id}`} className="pill !text-[12px] !py-1.5 !px-3 shrink-0">
-                      阅读 →
-                    </a>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                    <span className="mono text-[11px] text-zinc-400 tabular-nums shrink-0">
+                      {a.word_count} 字
+                    </span>
+                    {inProgress ? (
+                      <a href={`/quiz/${a.id}`} className="pill !text-[12px] !py-1.5 !px-3 shrink-0 magnetic">
+                        继续 {a.answered}/{a.quiz_count}
+                      </a>
+                    ) : a.quizzed ? (
+                      <span className="tag tier-3 shrink-0">已沉淀</span>
+                    ) : (
+                      <a href={`/read/${a.id}`} className="pill !text-[12px] !py-1.5 !px-3 shrink-0 magnetic">
+                        阅读 →
+                      </a>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </Reveal>
         )}
 
         {longItems.length > 0 && (
-          <div className="panel overflow-hidden">
-            <header className="px-6 py-4 border-b border-zinc-100 text-[13px] text-zinc-500">
-              采集池长文候选（≥800字）· 点按标题复制正文后手动投喂
-            </header>
-            <ul>
-              {longItems.map((it) => (
-                <li
-                  key={it.id}
-                  className="row px-6 py-3.5 border-b border-zinc-100 last:border-0 flex items-center gap-3"
-                >
-                  <span className="flex-1 min-w-0 truncate text-[13.5px] text-zinc-600">{it.title}</span>
-                  <span className="mono text-[11px] text-zinc-400 tabular-nums">{it.len} 字</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <Reveal variant="rows">
+            <div className="panel overflow-hidden">
+              <header className="px-6 py-4 border-b border-zinc-100 text-[13px] text-zinc-500">
+                采集池长文候选（≥800字）· 点按标题复制正文后手动投喂
+              </header>
+              <ul>
+                {longItems.map((it) => (
+                  <li
+                    key={it.id}
+                    className="row row-in px-6 py-3.5 border-b border-zinc-100 last:border-0 flex items-center gap-3"
+                  >
+                    <span className="flex-1 min-w-0 truncate text-[13.5px] text-zinc-600">{it.title}</span>
+                    <span className="mono text-[11px] text-zinc-400 tabular-nums">{it.len} 字</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </Reveal>
         )}
       </div>
     </div>

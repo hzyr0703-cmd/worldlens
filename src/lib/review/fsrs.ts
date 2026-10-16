@@ -43,7 +43,7 @@ function stateDue(stateJson: string): string | number {
   return Date.now();
 }
 
-export type DueCard = CardRow & { card: Card; variant: string; nuggetStatus: string; reps: number };
+export type DueCard = CardRow & { card: Card; variant: string; nuggetStatus: string; reps: number; kind: string };
 
 export function dueCards(limit = 20): DueCard[] {
   const db = getDb();
@@ -53,10 +53,10 @@ export function dueCards(limit = 20): DueCard[] {
        JOIN nuggets n ON n.id = rc.nugget_id
        WHERE rc.due <= datetime('now') ORDER BY rc.due LIMIT ?`
     )
-    .all(limit) as unknown as (CardRow & { nuggetStatus: string })[];
+    .all(limit) as unknown as (CardRow & { nuggetStatus: string; kind: string })[];
   return rows.map((r) => {
     const card = deserialize(r.fsrs_state);
-    return { ...r, card, variant: r.variant ?? "", reps: card.reps ?? 0 };
+    return { ...r, card, variant: r.variant ?? "", reps: card.reps ?? 0, kind: r.kind ?? "recall" };
   });
 }
 
@@ -64,6 +64,16 @@ export function pendingCount(): number {
   const db = getDb();
   return (
     db.prepare(`SELECT COUNT(*) n FROM review_cards WHERE due <= datetime('now')`).get() as unknown as { n: number }
+  ).n;
+}
+
+/** 到期对账卡数量（首页横幅用） */
+export function pendingVerifyCount(): number {
+  const db = getDb();
+  return (
+    db
+      .prepare(`SELECT COUNT(*) n FROM review_cards WHERE kind = 'verify' AND due <= datetime('now')`)
+      .get() as unknown as { n: number }
   ).n;
 }
 
@@ -108,10 +118,53 @@ export function reviewStats(): { today: number; total: number; streak: number } 
       streak++;
     } else if (i > 0 || streak > 0) {
       break;
-    } else if (i === 0) {
-      // 今天还没复习：从昨天起算
     }
     cur.setDate(cur.getDate() - 1);
   }
   return { today, total, streak };
+}
+
+/** 预测对账结算：confirmed 印证 / refuted 证伪 / unverifiable 无法验证（顺延 45 天）
+ *  evidenceItemId：可选——用一条快讯作为结算证据，写入世界观日志供回溯 */
+export function settleVerification(
+  cardId: number,
+  outcome: "confirmed" | "refuted" | "unverifiable",
+  note: string,
+  evidenceItemId?: number
+): void {
+  const db = getDb();
+  const card = db.prepare(`SELECT * FROM review_cards WHERE id = ? AND kind = 'verify'`).get(cardId) as unknown as
+    | { id: number; nugget_id: number; answer: string; due: string }
+    | undefined;
+  if (!card) throw new Error("verify card not found");
+  const nid = card.nugget_id;
+  const d = new Date().toISOString().slice(0, 10);
+
+  // 证据快讯：找到则拼进日志
+  let evidence = "";
+  if (evidenceItemId) {
+    const it = db
+      .prepare(`SELECT title, link FROM items WHERE id = ?`)
+      .get(evidenceItemId) as unknown as { title: string; link: string } | undefined;
+    if (it) evidence = ` [证据#${evidenceItemId}] ${it.title.slice(0, 80)}${it.link ? ` (${it.link})` : ""}`;
+  }
+
+  if (outcome === "confirmed") {
+    db.prepare(`UPDATE nuggets SET confidence = MIN(0.95, confidence + 0.15), status = 'reinforced' WHERE id = ?`).run(nid);
+    db.prepare(
+      `INSERT INTO worldview_log (nugget_id, action, detail, batch_date) VALUES (?, 'reinforced', ?, ?)`
+    ).run(nid, `预测对账：验证通过 — ${note.slice(0, 150)}${evidence}`, d);
+  } else if (outcome === "refuted") {
+    db.prepare(`UPDATE nuggets SET confidence = MAX(0.1, confidence - 0.3), status = 'challenged' WHERE id = ?`).run(nid);
+    db.prepare(
+      `INSERT INTO worldview_log (nugget_id, action, detail, batch_date) VALUES (?, 'challenged', ?, ?)`
+    ).run(nid, `预测对账：被现实证伪 — ${note.slice(0, 150)}${evidence}`, d);
+  } else {
+    // 无法验证：对账卡顺延 45 天
+    const next = new Date(Date.now() + 45 * 86400000).toISOString().slice(0, 19).replace("T", " ");
+    db.prepare(`UPDATE review_cards SET due = ? WHERE id = ?`).run(next, cardId);
+    return;
+  }
+
+  db.prepare(`DELETE FROM review_cards WHERE id = ?`).run(cardId);
 }

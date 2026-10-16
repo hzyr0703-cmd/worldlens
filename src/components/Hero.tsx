@@ -1,84 +1,42 @@
 /**
- * Hero — 复刻 Mobbin 首屏结构：
- * 居中巨型标题（逐行遮罩上推入场）→ 数字副标 → 多列交错上下滚动的彩色方块矩阵
- * 列数随断点变化（手机 3 列 / 桌面 6 列），保证方块在所有尺寸下都接近正方形，
- * 避免宽屏下被拉成扁长条。方块内容全部来自真实认知原子类型，不造假。
+ * Hero — 首页首屏。
+ *
+ * 结构：淡方格底纹 → 居中巨型标题（逐字入场）→ 数字副标（滚动+擦入）
+ *      → 真实数据方块矩阵（TileMatrix，客户端轮询实时刷新）→ 分类标签行 → 信源墙
+ *
+ * 方块矩阵内容是**真实抓取的快讯**，不是装饰色块：
+ * 每块显示标题摘要 + 信源名 + T 级，按层级配色（红/橙/蓝/灰）。
+ * 滚动方向交错、速度各异，悬停暂停并放大 —— 对应 Mobbin 的卡片墙手感。
  */
-
-type Tile = { label: string; sub: string; from: string; to: string; ink: string };
-
-const TILE_STYLE: Tile[] = [
-  { label: "机制", sub: "mechanism", from: "#00b8d4", to: "#0e7490", ink: "#fff" },
-  { label: "反例", sub: "counterexample", from: "#fb7185", to: "#e11d48", ink: "#fff" },
-  { label: "硬事实", sub: "fact", from: "#fbbf24", to: "#d97706", ink: "#3b1d02" },
-  { label: "模式", sub: "pattern", from: "#a78bfa", to: "#7c3aed", ink: "#fff" },
-  { label: "判断", sub: "judgment", from: "#34d399", to: "#059669", ink: "#022c22" },
-  { label: "开放问题", sub: "question", from: "#60a5fa", to: "#2563eb", ink: "#fff" },
-  { label: "印证", sub: "reinforced", from: "#f472b6", to: "#db2777", ink: "#fff" },
-  { label: "修正", sub: "revised", from: "#fcd34d", to: "#f59e0b", ink: "#3b1d02" },
-];
-
-function TileGrid({ items, down, dur, hideBelowLg }: {
-  items: Tile[];
-  down?: boolean;
-  dur: string;
-  /** 桌面 6 列时，后 3 列在手机上隐藏 */
-  hideBelowLg?: boolean;
-}) {
-  // 复制一份实现无缝循环（translateY(-50%) 对齐）
-  const doubled = [...items, ...items];
-  return (
-    <div className={`marquee ${down ? "marquee-down" : ""} ${hideBelowLg ? "hidden lg:block" : ""}`}>
-      <div className="marquee-track" style={{ ["--dur" as string]: dur }}>
-        {doubled.map((t, i) => (
-          <div
-            key={`${t.label}-${i}`}
-            className="tile tile-in"
-            style={{
-              background: `linear-gradient(145deg, ${t.from}, ${t.to})`,
-              color: t.ink,
-              // 每列首屏内的方块逐块 60ms 错峰入场，第二份副本延迟一个周期
-              ["--d" as string]: `${(i % items.length) * 60 + (i >= items.length ? 120 : 0)}ms`,
-            }}
-          >
-            <div className="text-[15px] font-semibold leading-none tracking-[-0.01em]">{t.label}</div>
-            <div className="text-[10px] opacity-75 mono leading-none">{t.sub}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+import CountUp from "@/components/CountUp";
+import SplitText from "@/components/SplitText";
+import TileMatrix from "@/components/TileMatrix";
+import type { TileData } from "@/lib/tiles";
 
 export default function Hero({
   items,
   articles,
   nuggets,
   due,
-  typeCounts,
   llmCalls,
   sources,
+  latestItems,
 }: {
   items: number;
   articles: number;
   nuggets: number;
   due: number;
-  typeCounts: Record<string, number>;
   llmCalls: number;
   sources: string[];
+  latestItems: TileData[];
 }) {
-  const c1 = [TILE_STYLE[0], TILE_STYLE[3], TILE_STYLE[5], TILE_STYLE[1], TILE_STYLE[7]];
-  const c2 = [TILE_STYLE[2], TILE_STYLE[6], TILE_STYLE[4], TILE_STYLE[0], TILE_STYLE[5]];
-  const c3 = [TILE_STYLE[1], TILE_STYLE[4], TILE_STYLE[2], TILE_STYLE[7], TILE_STYLE[3]];
-  // 桌面端追加 3 列，把宽屏下的长条比例拉回接近正方
-  const c4 = [TILE_STYLE[5], TILE_STYLE[1], TILE_STYLE[6], TILE_STYLE[3], TILE_STYLE[2]];
-  const c5 = [TILE_STYLE[4], TILE_STYLE[0], TILE_STYLE[7], TILE_STYLE[5], TILE_STYLE[1]];
-  const c6 = [TILE_STYLE[3], TILE_STYLE[2], TILE_STYLE[4], TILE_STYLE[6], TILE_STYLE[0]];
-
   return (
-    <section className="pt-10 sm:pt-16">
+    <section className="relative pt-10 sm:pt-16">
+      {/* Mobbin 招牌的极淡方格底纹，藏在标题后方 */}
+      <div className="grid-veil pointer-events-none absolute inset-x-0 top-0 h-[620px]" aria-hidden />
+
       {/* 巨型标题 */}
-      <div className="text-center">
+      <div className="relative text-center">
         {/* kicker：小圆点脉冲 + 文字淡入 */}
         <div className="hero-kicker inline-flex items-center gap-2.5">
           <span className="relative flex h-1.5 w-1.5">
@@ -90,11 +48,11 @@ export default function Hero({
           </span>
         </div>
 
-        {/* 逐行遮罩上推 */}
+        {/* 逐字遮罩上推 */}
         <h1 className="mt-7 text-[44px] sm:text-[68px] lg:text-[82px] leading-[0.98] font-semibold tracking-[-0.045em]">
           <span className="block overflow-hidden">
             <span className="block hero-line" style={{ ["--d" as string]: "80ms" }}>
-              读过的世界
+              <SplitText text="读过的世界" />
             </span>
           </span>
           <span className="block overflow-hidden">
@@ -102,7 +60,7 @@ export default function Hero({
               className="block hero-line"
               style={{ ["--d" as string]: "200ms" }}
             >
-              变成你自己的理解
+              <SplitText text="变成你自己的理解" delay={180} />
             </span>
           </span>
         </h1>
@@ -112,21 +70,29 @@ export default function Hero({
           <span className="hero-rule" />
         </div>
 
-        {/* 副标 */}
-        <p className="hero-line mt-7 text-[17px] sm:text-[19px] leading-relaxed text-zinc-600 max-w-[60ch] mx-auto">
-          {items.toLocaleString()} 条真实信息采集入库，{articles} 篇深度长文全文可读。
+        {/* 副标：clip-path 从左擦入 */}
+        <p
+          className="hero-line wipe mt-7 text-[17px] sm:text-[19px] leading-relaxed text-zinc-600 max-w-[60ch] mx-auto"
+          style={{ ["--d" as string]: "420ms" }}
+        >
+          <CountUp value={items} /> 条真实信息采集入库，
+          <CountUp value={articles} /> 篇深度长文全文可读。
           <br className="hidden sm:block" />
           AI 不替你理解——它出题、等你作答、指出你漏掉的那一层。
         </p>
 
-        {/* CTA */}
+        {/* CTA：磁性按钮 + 光泽扫过 */}
         <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-          <a href="/inbox" className="cta cta-accent hero-line" style={{ ["--d" as string]: "320ms" }}>
+          <a
+            href="/inbox"
+            className="cta cta-accent hero-line magnetic"
+            style={{ ["--d" as string]: "320ms" }}
+          >
             挑一篇开始精读 <span className="hero-arrow">→</span>
           </a>
           <a
             href="/review"
-            className="ghost hero-line"
+            className="ghost hero-line magnetic"
             style={{ ["--d" as string]: "380ms" }}
           >
             {due > 0 ? `${due} 张卡片待复习` : "复习队列"}
@@ -134,45 +100,22 @@ export default function Hero({
         </div>
 
         {/* 数据条 */}
-        <div className="hero-line mt-8 flex flex-wrap items-center justify-center gap-3 sm:gap-5 text-[11.5px] sm:text-[12.5px] text-zinc-400" style={{ ["--d" as string]: "440ms" }}>
-          <span className="mono tabular-nums">{items} 信息</span>
+        <div
+          className="hero-line mt-8 flex flex-wrap items-center justify-center gap-3 sm:gap-5 text-[11.5px] sm:text-[12.5px] text-zinc-400"
+          style={{ ["--d" as string]: "440ms" }}
+        >
+          <span className="mono tabular-nums"><CountUp value={items} /> 信息</span>
           <span className="hero-dot" />
-          <span className="mono tabular-nums">{articles} 长文</span>
+          <span className="mono tabular-nums"><CountUp value={articles} /> 长文</span>
           <span className="hero-dot" />
-          <span className="mono tabular-nums">{nuggets} 原子</span>
+          <span className="mono tabular-nums"><CountUp value={nuggets} /> 原子</span>
           <span className="hero-dot" />
-          <span className="mono tabular-nums">LLM {llmCalls} 次/日</span>
+          <span className="mono tabular-nums">LLM <CountUp value={llmCalls} /> 次/日</span>
         </div>
       </div>
 
-      {/* 彩色方块矩阵：手机 3 列 / 桌面 6 列，比例在所有尺寸下都接近正方 */}
-      <div className="hero-matrix mt-12 sm:mt-20 grid grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 h-[300px] sm:h-[480px]">
-        <TileGrid items={c1} dur="52s" />
-        <TileGrid items={c2} down dur="61s" />
-        <TileGrid items={c3} dur="44s" />
-        <TileGrid items={c4} down dur="56s" hideBelowLg />
-        <TileGrid items={c5} dur="64s" hideBelowLg />
-        <TileGrid items={c6} down dur="48s" hideBelowLg />
-      </div>
-
-      {/* 分类标签行 — Mobbin 的招牌导航形态 */}
-      <div className="mt-14 sm:mt-16 flex flex-wrap items-center justify-center gap-2">
-        {[
-          { l: "机制", k: "mechanism" },
-          { l: "模式", k: "pattern" },
-          { l: "硬事实", k: "fact" },
-          { l: "反例", k: "counterexample" },
-          { l: "判断", k: "judgment" },
-          { l: "开放问题", k: "question" },
-        ].map((t) => (
-          <a key={t.k} href="/library" className="pill !text-[13px] !py-2 !px-4">
-            {t.l}
-            <span className="mono text-[11px] text-zinc-400 tabular-nums">
-              {typeCounts[t.k] ?? 0}
-            </span>
-          </a>
-        ))}
-      </div>
+      {/* 真实数据方块矩阵：手机 3 列 / 桌面 6 列，客户端每 60s 轮询实时刷新 */}
+      <TileMatrix initialTiles={latestItems} />
 
       {/* 信源墙 — 对应 Mobbin 的 "Trusted by teams and agents at"，读真实启用源 */}
       <div className="mt-16 sm:mt-20">

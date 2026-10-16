@@ -87,7 +87,7 @@ export async function extractPending(limit = 200): Promise<ExtractResult> {
 
   for (const row of rows) {
     const text = `${row.title}。${row.content}`.slice(0, 2000);
-    let ids = matchEntities(text, dict);
+    const ids = matchEntities(text, dict);
 
     // LLM 增强（仅当规则零命中且配置了 key，控制成本）
     if (ids.length === 0 && llmEnabled) {

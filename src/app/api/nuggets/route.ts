@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAuthed } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 
 export const maxDuration = 60;
@@ -10,6 +11,7 @@ export const maxDuration = 60;
  * POST   { keepId, mergeId }          —— 合并：keep 保留，merge 退役，links 迁移
  */
 export async function PATCH(req: NextRequest) {
+  if (!isAuthed(req)) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   try {
     const { id, statement, elaboration, type, confidence } = (await req.json()) as {
       id: number; statement?: string; elaboration?: string; type?: string; confidence?: number;
@@ -32,6 +34,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  if (!isAuthed(req)) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   try {
     const { id } = (await req.json()) as { id: number };
     if (!id) throw new Error("id required");
@@ -49,6 +52,7 @@ export async function DELETE(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (!isAuthed(req)) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   try {
     const { keepId, mergeId } = (await req.json()) as { keepId: number; mergeId: number };
     if (!keepId || !mergeId || keepId === mergeId) throw new Error("keepId/mergeId required");

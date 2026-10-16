@@ -29,7 +29,9 @@
 
   --duration-quick: 140ms;
   --duration-fast: 220ms;
+  --duration-slow: 420ms;
   --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.42, 0.5, 1);
 }
 
 /* zinc 语义色重映射：既有页面的 zinc-* 类自动切到浅底可读 */
@@ -93,14 +95,55 @@ body {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 18px;
+  position: relative;
   transition: border-color var(--duration-fast) var(--ease-smooth-out),
-    transform var(--duration-fast) var(--ease-smooth-out),
-    box-shadow var(--duration-fast) var(--ease-smooth-out);
+    transform var(--duration-slow) var(--ease-smooth-out),
+    box-shadow var(--duration-slow) var(--ease-smooth-out);
 }
 .panel:hover {
   border-color: #dcdce0;
   box-shadow: 0 14px 34px -20px rgba(10, 10, 11, 0.28);
 }
+
+/* 指针跟随高光：跟随鼠标的柔和青色光斑，让卡片"活"起来 */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-smooth-out);
+  background: radial-gradient(
+    340px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(0, 184, 212, 0.09),
+    transparent 62%
+  );
+}
+.panel:hover::before { opacity: 1; }
+
+/* 渐变描边：hover 时一层青色描边从左上扫向右下 */
+.panel::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-smooth-out);
+  background: linear-gradient(
+    135deg,
+    rgba(0, 184, 212, 0.55),
+    rgba(232, 68, 127, 0.32) 55%,
+    transparent 85%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+.panel:hover::after { opacity: 1; }
 
 /* ── 主按钮：唯一强调色 ── */
 .cta {
@@ -113,9 +156,28 @@ body {
   padding: 9px 18px;
   font-size: 13px;
   font-weight: 600;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
   transition: transform var(--duration-fast) var(--ease-smooth-out),
     box-shadow var(--duration-fast) var(--ease-smooth-out);
 }
+/* 光泽扫过：hover 时一道低透明白条从左扫到右 */
+.cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.28) 48%,
+    transparent 76%
+  );
+  transform: translateX(-130%);
+  transition: transform 620ms var(--ease-smooth-out);
+}
+.cta:hover::after { transform: translateX(130%); }
 .cta:hover { transform: translateY(-1px); box-shadow: 0 8px 20px -10px rgba(24,24,27,0.5); }
 
 .cta-accent {
@@ -222,7 +284,20 @@ body {
   from { opacity: 0; transform: translateY(14px) scale(0.985); }
   to { opacity: 1; transform: none; }
 }
-.card-in { animation: card-in 520ms var(--ease-smooth-out) backwards; }
+/* 卡片进入视口时逐个浮起；--i 由调用方给序号，没给就同时入场 */
+.card-in { animation: card-in 520ms var(--ease-smooth-out) backwards;
+  animation-delay: calc(var(--i, 0) * 55ms); }
+
+/* 网格容器：让直接子卡片按序号错峰（配合 card-in 使用，优先于 delay:backwards） */
+.stagger > .card-in:nth-child(1) { animation-delay: 0ms; }
+.stagger > .card-in:nth-child(2) { animation-delay: 60ms; }
+.stagger > .card-in:nth-child(3) { animation-delay: 120ms; }
+.stagger > .card-in:nth-child(4) { animation-delay: 180ms; }
+.stagger > .card-in:nth-child(5) { animation-delay: 240ms; }
+.stagger > .card-in:nth-child(6) { animation-delay: 300ms; }
+.stagger > .card-in:nth-child(7) { animation-delay: 360ms; }
+.stagger > .card-in:nth-child(8) { animation-delay: 420ms; }
+.stagger > .card-in:nth-child(9) { animation-delay: 480ms; }
 
 /* ============================================================
    Hero 图标矩阵：无缝纵向 marquee
@@ -254,28 +329,33 @@ body {
   to { transform: translateY(0); }
 }
 
-/* 彩色矩阵方块：品牌化渐变底 + 悬停微放大 */
+/* 彩色矩阵方块：承载真实快讯摘要，悬停微放大 */
 .tile {
   border-radius: 14px;
   padding: 12px 13px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  min-height: 96px;
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  justify-content: flex-start;
+  gap: 2px;
+  min-height: 104px;
+  /* 描边色由 tier 配色注入，深浅块各自匹配 */
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.55));
+  /* 顶部一道极淡内高光，卡片才有"材质"而不是平涂色 */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  overflow: hidden;
   transition: transform var(--duration-fast) var(--ease-smooth-out),
-    box-shadow var(--duration-fast) var(--ease-smooth-out),
-    min-height var(--duration-slow) var(--ease-smooth-out);
+    box-shadow var(--duration-fast) var(--ease-smooth-out);
 }
-/* 桌面 6 列时进一步加高，让方块保持接近正方的比例 */
+/* 桌面 6 列时进一步加高，让 3 行摘要也能完整显示 */
 @media (min-width: 1024px) {
-  .tile { min-height: 132px; padding: 14px 15px; }
-  .tile .text-\[15px\] { font-size: 16px; }
-  .tile .text-\[10px\] { font-size: 11px; }
+  .tile { min-height: 138px; padding: 13px 14px; }
+  .tile .text-\[15px\] { font-size: 15.5px; }
+  .tile .text-\[10px\] { font-size: 10.5px; }
 }
 .tile:hover {
   transform: scale(1.045);
-  box-shadow: 0 10px 22px -12px rgba(24, 24, 27, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 14px 28px -14px rgba(28, 30, 34, 0.42);
   z-index: 2;
   position: relative;
 }
@@ -525,6 +605,322 @@ body {
   letter-spacing: -0.018em;
 }
 
+/* ============================================================
+   动效层 · Motion primitives
+   对应 Mobbin 的交互质感：指针跟随、光标牵引、滚动进度、
+   数字滚动、字符入场、磁性按钮、页面切换
+   ============================================================ */
+
+/* ① 滚动进度条：顶栏下方 2px，随页面滚动填充 */
+.scroll-progress {
+  position: fixed;
+  top: 56px;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  z-index: 45;
+  pointer-events: none;
+}
+.scroll-progress > i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform: scaleX(var(--p, 0));
+  transform-origin: left center;
+  background: linear-gradient(90deg, #00b8d4, #7dd3e8 55%, #e8447f);
+  transition: transform 90ms linear;
+}
+
+/* ② 磁性按钮：光标靠近时轻微被"吸"过去 */
+.magnetic {
+  transform: translate3d(
+    calc(var(--mx, 0) * 1px),
+    calc(var(--my, 0) * 1px),
+    0
+  );
+  transition: transform var(--duration-slow) var(--ease-spring);
+}
+.magnetic.is-active { transition: transform 90ms linear; }
+
+/* ③ 数字滚动：等宽数字从 0 递增 */
+.count { font-variant-numeric: tabular-nums; }
+
+/* ④ 字符级入场：标题按字符错峰上浮 */
+@keyframes char-in {
+  from { opacity: 0; transform: translateY(0.42em) rotate(1.6deg); }
+  to { opacity: 1; transform: none; }
+}
+.split-char {
+  display: inline-block;
+  animation: char-in 620ms var(--ease-smooth-out) backwards;
+  animation-delay: calc(var(--i, 0) * 26ms);
+}
+
+/* ⑤ 文字擦入：clip-path 从左展开，适合副标和段落 */
+@keyframes wipe-in {
+  from { clip-path: inset(0 100% 0 0); opacity: 0.2; }
+  to { clip-path: inset(0 0 0 0); opacity: 1; }
+}
+.wipe {
+  animation: wipe-in 900ms var(--ease-smooth-out) backwards;
+  animation-delay: var(--d, 0ms);
+}
+
+/* ⑥ 视差位移层：滚动时缓慢上下移动（JS 写 --py） */
+.parallax {
+  transform: translate3d(0, calc(var(--py, 0) * 1px), 0);
+  will-change: transform;
+}
+
+/* ⑦ 卡片悬停的图像/方块缩放（用于有图容器） */
+.zoomable { overflow: hidden; }
+.zoomable > img,
+.zoomable > .zoom-target {
+  transition: transform var(--duration-slow) var(--ease-smooth-out);
+}
+.zoomable:hover > img,
+.zoomable:hover > .zoom-target { transform: scale(1.045); }
+
+/* ⑧ 顶栏滚动后收紧：滚动超过 8px 加背景与阴影 */
+.topbar { transition: background-color var(--duration-fast) var(--ease-smooth-out),
+  box-shadow var(--duration-fast) var(--ease-smooth-out),
+  border-color var(--duration-fast) var(--ease-smooth-out); }
+.topbar.is-scrolled {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 0 rgba(10, 10, 11, 0.05), 0 8px 22px -18px rgba(10, 10, 11, 0.3);
+}
+
+/* ⑨ 导航下划线：hover 时从左展开 */
+.nav-link {
+  position: relative;
+  transition: color var(--duration-fast) var(--ease-smooth-out);
+}
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 2px;
+  height: 1.5px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform var(--duration-fast) var(--ease-smooth-out);
+}
+.nav-link:hover::after,
+.nav-link[aria-current="page"]::after { transform: scaleX(1); }
+
+/* ⑩ 文字渐显：进入视口时描边淡入（用于大标题的第二层） */
+.stroke-text {
+  color: transparent;
+  -webkit-text-stroke: 1px #d4d4d8;
+  transition: -webkit-text-stroke-color var(--duration-slow) var(--ease-smooth-out);
+}
+.stroke-text:hover { -webkit-text-stroke-color: #00b8d4; }
+
+/* ⑪ 交错网格入场：配合 Reveal 使用，grid 子项逐个浮起 */
+.stagger-grid > * {
+  opacity: 0;
+  transform: translateY(16px) scale(0.99);
+  transition: opacity 620ms var(--ease-smooth-out),
+    transform 620ms var(--ease-smooth-out);
+}
+.stagger-grid.in > * { opacity: 1; transform: none; }
+.stagger-grid.in > *:nth-child(1) { transition-delay: 40ms; }
+.stagger-grid.in > *:nth-child(2) { transition-delay: 100ms; }
+.stagger-grid.in > *:nth-child(3) { transition-delay: 160ms; }
+.stagger-grid.in > *:nth-child(4) { transition-delay: 220ms; }
+.stagger-grid.in > *:nth-child(5) { transition-delay: 280ms; }
+.stagger-grid.in > *:nth-child(6) { transition-delay: 340ms; }
+.stagger-grid.in > *:nth-child(7) { transition-delay: 400ms; }
+.stagger-grid.in > *:nth-child(8) { transition-delay: 460ms; }
+
+/* 内页列表行：进入视口后逐行滑入。列表通常很长，
+   用 --row-i 序号做延迟，上限 14 行（再多的行同时出现，避免尾部等待过久）。 */
+.row-in {
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: opacity 480ms var(--ease-smooth-out),
+    transform 480ms var(--ease-smooth-out);
+}
+.row-in.in { opacity: 1; transform: none; }
+.rows-in > .row-in.in:nth-child(1) { transition-delay: 0ms; }
+.rows-in > .row-in.in:nth-child(2) { transition-delay: 45ms; }
+.rows-in > .row-in.in:nth-child(3) { transition-delay: 90ms; }
+.rows-in > .row-in.in:nth-child(4) { transition-delay: 135ms; }
+.rows-in > .row-in.in:nth-child(5) { transition-delay: 180ms; }
+.rows-in > .row-in.in:nth-child(6) { transition-delay: 225ms; }
+.rows-in > .row-in.in:nth-child(7) { transition-delay: 270ms; }
+.rows-in > .row-in.in:nth-child(8) { transition-delay: 315ms; }
+.rows-in > .row-in.in:nth-child(9) { transition-delay: 360ms; }
+.rows-in > .row-in.in:nth-child(10) { transition-delay: 405ms; }
+.rows-in > .row-in.in:nth-child(11) { transition-delay: 450ms; }
+.rows-in > .row-in.in:nth-child(12) { transition-delay: 495ms; }
+.rows-in > .row-in.in:nth-child(13) { transition-delay: 540ms; }
+.rows-in > .row-in.in:nth-child(n + 14) { transition-delay: 585ms; }
+
+/* ⑫ 骨架微光：加载态的扫光条 */
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 184, 212, 0.1),
+    transparent
+  );
+  animation: shimmer 1.6s var(--ease-smooth-out) infinite;
+}
+
+/* ⑬ 网格底纹：Hero 背后极淡的方格，Mobbin 的招牌质感 */
+.grid-veil {
+  background-image: linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(760px 420px at 50% 22%, #000 0%, transparent 78%);
+  mask-image: radial-gradient(760px 420px at 50% 22%, #000 0%, transparent 78%);
+}
+
+/* ⑭ 页面切换：路由切换时整页轻微淡入上浮 */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.page-enter { animation: page-in 520ms var(--ease-smooth-out) backwards; }
+
+/* ⑮ 光标跟随的柔和青色光斑（全局，桌面端才启用） */
+.cursor-glow {
+  position: fixed;
+  width: 420px;
+  height: 420px;
+  margin: -210px 0 0 -210px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(
+    closest-side,
+    rgba(0, 184, 212, 0.07),
+    transparent 72%
+  );
+  transform: translate3d(var(--cx, 50vw), var(--cy, 30vh), 0);
+  transition: opacity 300ms var(--ease-smooth-out);
+}
+@media (pointer: coarse) {
+  .cursor-glow { display: none; }
+}
+
+/* ⑯ 正文阅读进度条：只在有 .read-body 的页面点亮，跟踪正文而非整页 */
+.reading-progress {
+  position: fixed;
+  top: 56px;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  z-index: 46;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-smooth-out);
+}
+.reading-progress > i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform: scaleX(var(--p, 0));
+  transform-origin: left center;
+  background: linear-gradient(90deg, #00b8d4, #e8447f);
+  transition: transform 90ms linear;
+}
+/* 页面里有正文才显示；两层进度条叠在一起时把整页那条压暗 */
+body:has(.read-body) .scroll-progress > i {
+  background: linear-gradient(90deg, #d4d4d8, #e4e4e7);
+}
+body:has(.read-body) .reading-progress { opacity: 1; }
+
+/* ⑰ 文本选择品牌色 */
+::selection { background: rgba(0, 184, 212, 0.22); }
+
+/* ============================================================
+   核心流程动效：复习作答 / 图谱 / 加载态
+   ============================================================ */
+
+/* ⑱ 卡片整体入场（完成态、空态用） */
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+.panel-in { animation: panel-in 620ms var(--ease-smooth-out) backwards; }
+
+/* ⑲ 换卡转场：答完一张切下一张时，新卡从下方推入 + 轻微缩放。
+   这是作答流程里最重要的动效，节奏要快（~440ms）才不拖慢复习。 */
+@keyframes card-swap {
+  from { opacity: 0; transform: translateY(22px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.card-swap { animation: card-swap 440ms var(--ease-smooth-out) backwards; }
+
+/* ⑳ 答案揭晓：clip-path 从上往下"拉开"，模拟翻牌 */
+@keyframes answer-reveal {
+  from { opacity: 0; clip-path: inset(0 0 100% 0); transform: translateY(-6px); }
+  to { opacity: 1; clip-path: inset(0 0 0 0); transform: none; }
+}
+.reveal-answer { animation: answer-reveal 520ms var(--ease-smooth-out) backwards; }
+
+/* ㉑ 评分按钮错峰：答案出现后逐个落下 */
+@keyframes button-drop {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.stagger-buttons > * {
+  animation: button-drop 400ms var(--ease-smooth-out) backwards;
+}
+.stagger-buttons > *:nth-child(1) { animation-delay: 240ms; }
+.stagger-buttons > *:nth-child(2) { animation-delay: 300ms; }
+.stagger-buttons > *:nth-child(3) { animation-delay: 360ms; }
+.stagger-buttons > *:nth-child(4) { animation-delay: 420ms; }
+
+/* ㉒ 图谱容器：面板质感 + 悬停时节点更醒目 */
+.graph-shell {
+  background:
+    radial-gradient(760px 420px at 50% 0%, rgba(0, 184, 212, 0.05), transparent 70%),
+    #fcfcfd;
+}
+/* 悬浮信息卡入场 */
+@keyframes tooltip-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.tooltip-in { animation: tooltip-in 200ms var(--ease-smooth-out) backwards; }
+.gnode circle {
+  transition: r 200ms var(--ease-spring), filter 200ms var(--ease-smooth-out),
+    stroke-width 200ms var(--ease-smooth-out);
+}
+.gnode:hover circle {
+  filter: drop-shadow(0 2px 6px rgba(10, 10, 11, 0.28));
+  stroke-width: 2.5;
+}
+.gnode text {
+  transition: fill 200ms var(--ease-smooth-out), font-weight 200ms var(--ease-smooth-out);
+  pointer-events: none;
+}
+.gnode:hover text { fill: #0a0a0b; font-weight: 600; }
+/* 节点整体入场：按 id 错峰淡入，避免力导向收敛瞬间全糊在一起 */
+@keyframes node-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.gnode, .edge { animation: node-in 520ms var(--ease-smooth-out) backwards; }
+.edge { animation-duration: 700ms; }
+
+/* JS 未接管前不要让 pointer 光效露出，避免闪一下 */
+@media (scripting: none) {
+  .cursor-glow { display: none; }
+}
 
 
 @media (prefers-reduced-motion: reduce) {

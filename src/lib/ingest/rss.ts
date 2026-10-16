@@ -1,5 +1,6 @@
 import Parser from "rss-parser";
 import { getDb, contentHash } from "@/lib/db";
+import { RSSHUB_MIRRORS } from "@/lib/ingest/sources";
 
 // ---------------------------------------------------------------------------
 // RSS 采集：拉取 → 解析 → 去重 → 入库。幂等，可反复触发。
@@ -41,9 +42,25 @@ export async function fetchSource(source: {
   url: string;
   tier: number;
 }): Promise<IngestResult> {
+  // RSSHub 路由失败时轮换公共镜像重试（直连源只有一个 URL，轮换等于原样重试一次）
+  let lastErr: unknown = null;
+  for (const mirror of RSSHUB_MIRRORS) {
+    const url = source.url.includes("/hub.slarker.me/")
+      ? source.url.replace("https://hub.slarker.me", mirror)
+      : source.url;
+    const r = await fetchSourceOnce(source, url);
+    if (!r.error) return r;
+    lastErr = r.error;
+  }
+  return { source: source.name, fetched: 0, inserted: 0, error: String(lastErr).slice(0, 80) };
+}
+
+async function fetchSourceOnce(source: {
+  id: number; name: string; url: string; tier: number;
+}, urlOverride?: string): Promise<IngestResult> {
   const db = getDb();
   try {
-    const feed = await parser.parseURL(source.url);
+    const feed = await parser.parseURL(urlOverride ?? source.url);
     let inserted = 0;
     const fetched = feed.items.length;
 

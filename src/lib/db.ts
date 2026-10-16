@@ -13,7 +13,6 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 const DB_PATH = path.join(DATA_DIR, "worldlens.db");
 
 declare global {
-  // eslint-disable-next-line no-var
   var __worldlensDb: DatabaseSync | undefined;
 }
 
@@ -39,6 +38,10 @@ function initSchema(db: DatabaseSync) {
     `ALTER TABLE articles ADD COLUMN refined TEXT DEFAULT ''`,
     `ALTER TABLE articles ADD COLUMN original_body TEXT DEFAULT ''`,
     `ALTER TABLE review_cards ADD COLUMN variant TEXT DEFAULT ''`,
+    `ALTER TABLE review_cards ADD COLUMN kind TEXT NOT NULL DEFAULT 'recall'`,
+    `ALTER TABLE nuggets ADD COLUMN verify_by TEXT DEFAULT ''`,
+    `ALTER TABLE nuggets ADD COLUMN verify_date TEXT DEFAULT ''`,
+    `ALTER TABLE articles ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'official'`,
   ]) {
     try {
       db.exec(ddl);
@@ -54,6 +57,14 @@ function initSchema(db: DatabaseSync) {
       ms INTEGER NOT NULL,
       ok INTEGER NOT NULL DEFAULT 1,
       error TEXT DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS cron_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_date TEXT NOT NULL,
+      ok INTEGER NOT NULL DEFAULT 1,
+      detail TEXT NOT NULL DEFAULT '',
+      ms INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS prefs (
@@ -162,8 +173,27 @@ function initSchema(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_nuggets_type ON nuggets(type);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS nuggets_fts USING fts5(
-      statement, elaboration, content='nuggets', content_rowid='id', tokenize='unicode61'
+      statement, elaboration, content='nuggets', content_rowid='id', tokenize='trigram'
     );
+  `);
+
+  /* 旧库迁移：unicode61 对中文无效（整句一个 token，搜索永远 0 命中）。
+     检测到旧分词器就重建为 trigram 并回填，一次性开销。 */
+  {
+    const ftsSql = db
+      .prepare(`SELECT sql FROM sqlite_master WHERE name = 'nuggets_fts'`)
+      .get() as { sql: string } | undefined;
+    if (ftsSql?.sql && !ftsSql.sql.includes("trigram")) {
+      db.exec(`DROP TABLE IF EXISTS nuggets_fts`);
+      db.exec(`CREATE VIRTUAL TABLE nuggets_fts USING fts5(
+        statement, elaboration, content='nuggets', content_rowid='id', tokenize='trigram'
+      )`);
+      db.exec(`INSERT INTO nuggets_fts(rowid, statement, elaboration)
+               SELECT id, statement, elaboration FROM nuggets`);
+    }
+  }
+
+  db.exec(`
     CREATE TRIGGER IF NOT EXISTS nuggets_ai AFTER INSERT ON nuggets BEGIN
       INSERT INTO nuggets_fts(rowid, statement, elaboration)
       VALUES (new.id, new.statement, new.elaboration);

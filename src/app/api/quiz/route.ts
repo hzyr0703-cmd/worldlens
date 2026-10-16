@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAuthed } from "@/lib/auth";
 import { generateQuiz, gradeAnswer, digestArticle } from "@/lib/quiz/engine";
 
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
+  if (!isAuthed(req)) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   const { action, articleId, quizId, answer } = (await req.json()) as {
     action: "generate" | "answer" | "digest";
     articleId?: number;

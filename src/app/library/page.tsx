@@ -2,6 +2,7 @@ import { getDb } from "@/lib/db";
 import NuggetCard, { TYPE_CN } from "@/components/NuggetCard";
 import NuggetActions from "@/components/NuggetActions";
 import PageHead from "@/components/PageHead";
+import Reveal from "@/components/Reveal";
 
 export const dynamic = "force-dynamic";
 
@@ -27,17 +28,40 @@ export default async function LibraryPage({
 
   let all: Nugget[];
   if (q?.trim()) {
-    // FTS5 全文检索（索引早已建好，这里只是暴露出来）
+    // 分词后分组检索：trigram 分词器只能 MATCH ≥3 字符的词，
+    // 中文常用词多是 2 字（"经济""利率"），短词走 LIKE 兜底，两路合并去重。
     const terms = q.trim().replace(/[，。、：；！？\s]/g, " ").split(" ").filter((w) => w.length >= 1).slice(0, 6);
-    const match = terms.map((t) => `"${t}"`).join(" OR ");
-    all = terms.length
-      ? (db
-          .prepare(
-            `SELECT n.* FROM nuggets n JOIN nuggets_fts f ON n.id = f.rowid
-             WHERE nuggets_fts MATCH ? AND n.status != 'retired' ORDER BY rank LIMIT 60`
-          )
-          .all(match) as unknown as Nugget[])
-      : [];
+    const longTerms = terms.filter((t) => t.length >= 3);
+    const shortTerms = terms.filter((t) => t.length < 3);
+    const seen = new Set<number>();
+    const merged: Nugget[] = [];
+
+    if (longTerms.length) {
+      const match = longTerms.map((t) => `"${t}"`).join(" OR ");
+      const ftsRows = db
+        .prepare(
+          `SELECT n.* FROM nuggets n JOIN nuggets_fts f ON n.id = f.rowid
+           WHERE nuggets_fts MATCH ? AND n.status != 'retired' ORDER BY rank LIMIT 60`
+        )
+        .all(match) as unknown as Nugget[];
+      for (const r of ftsRows) {
+        if (!seen.has(r.id)) { seen.add(r.id); merged.push(r); }
+      }
+    }
+    if (shortTerms.length && merged.length < 60) {
+      const like = shortTerms.map(() => `(statement LIKE ? OR elaboration LIKE ?)`).join(" OR ");
+      const args = shortTerms.flatMap((t) => [`%${t}%`, `%${t}%`]);
+      const likeRows = db
+        .prepare(
+          `SELECT * FROM nuggets WHERE status != 'retired' AND (${like})
+           ORDER BY distill_date DESC, confidence DESC LIMIT 60`
+        )
+        .all(...args) as unknown as Nugget[];
+      for (const r of likeRows) {
+        if (!seen.has(r.id)) { seen.add(r.id); merged.push(r); }
+      }
+    }
+    all = merged;
   } else if (type) {
     all = db
       .prepare(`SELECT * FROM nuggets WHERE type = ? AND status != 'retired' ORDER BY distill_date DESC, confidence DESC`)
@@ -74,10 +98,10 @@ export default async function LibraryPage({
             placeholder="搜索你的原子…"
             className="field !w-auto flex-1 min-w-[200px] !py-2.5"
           />
-          <button type="submit" className="ghost">搜索</button>
-          <a href="/library" className={`pill ${!q && !type ? "pill-active" : ""}`}>全部</a>
+          <button type="submit" className="ghost magnetic">搜索</button>
+          <a href="/library" className={`pill magnetic ${!q && !type ? "pill-active" : ""}`}>全部</a>
           {Object.entries(TYPE_CN).map(([k, cn]) => (
-            <a key={k} href={`/library?type=${k}`} className={`pill ${type === k ? "pill-active" : ""}`}>
+            <a key={k} href={`/library?type=${k}`} className={`pill magnetic ${type === k ? "pill-active" : ""}`}>
               {cn}
               <span className="mono text-[11px] text-zinc-400 tabular-nums">{typeCounts[k] ?? 0}</span>
             </a>
@@ -90,16 +114,18 @@ export default async function LibraryPage({
             <p className="text-[13.5px] text-zinc-500 mt-2 max-w-[42ch] mx-auto leading-relaxed">
               {q ? "换个关键词试试，或清除筛选浏览全部。" : "去文章池投一篇长文，让 AI 考你，你答完后原子才会生成。"}
             </p>
-            <a href="/inbox" className="btn-solid mt-6">去文章池 →</a>
+            <a href="/inbox" className="btn-solid mt-6 magnetic">去文章池 →</a>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {all.map((n) => (
-              <NuggetCard key={n.id} nugget={n}>
-                <NuggetActions id={n.id} statement={n.statement} />
-              </NuggetCard>
-            ))}
-          </div>
+          <Reveal variant="stagger">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {all.map((n) => (
+                <NuggetCard key={n.id} nugget={n}>
+                  <NuggetActions id={n.id} statement={n.statement} />
+                </NuggetCard>
+              ))}
+            </div>
+          </Reveal>
         )}
       </div>
     </div>

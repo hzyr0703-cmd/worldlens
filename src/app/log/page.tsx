@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db";
 import PageHead from "@/components/PageHead";
+import Reveal from "@/components/Reveal";
 
 export const dynamic = "force-dynamic";
 
@@ -48,30 +49,32 @@ export default function LogPage() {
             </p>
           </div>
         ) : (
-          <ul className="panel overflow-hidden">
-            {logs.map((l) => {
-              const meta = ACTION_META[l.action] ?? { cn: l.action, cls: "tier-3" };
-              return (
-                <li
-                  key={l.id}
-                  className="row px-6 py-5 border-b border-zinc-100 last:border-0"
-                >
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className={`tag ${meta.cls}`}>{meta.cn}</span>
-                    <span className="mono text-[11px] text-zinc-400 tabular-nums">
-                      {l.batch_date}
-                    </span>
-                  </div>
-                  {l.nugget_statement && (
-                    <p className="text-[14px] font-medium leading-snug mt-2.5 tracking-[-0.008em]">
-                      {l.nugget_statement}
-                    </p>
-                  )}
-                  <p className="text-[13px] text-zinc-500 leading-relaxed mt-2">{l.detail}</p>
-                </li>
-              );
-            })}
-          </ul>
+          <Reveal variant="rows">
+            <ul className="panel overflow-hidden">
+              {logs.map((l) => {
+                const meta = ACTION_META[l.action] ?? { cn: l.action, cls: "tier-3" };
+                return (
+                  <li
+                    key={l.id}
+                    className="row row-in px-6 py-5 border-b border-zinc-100 last:border-0"
+                  >
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className={`tag ${meta.cls}`}>{meta.cn}</span>
+                      <span className="mono text-[11px] text-zinc-400 tabular-nums">
+                        {l.batch_date}
+                      </span>
+                    </div>
+                    {l.nugget_statement && (
+                      <p className="text-[14px] font-medium leading-snug mt-2.5 tracking-[-0.008em]">
+                        {l.nugget_statement}
+                      </p>
+                    )}
+                    <p className="text-[13px] text-zinc-500 leading-relaxed mt-2">{l.detail}</p>
+                  </li>
+                );
+              })}
+            </ul>
+          </Reveal>
         )}
       </div>
     </div>

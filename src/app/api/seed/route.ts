@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { isAuthed } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { SEED_SOURCES, SEED_ENTITIES, DISABLED_SOURCE_URLS } from "@/lib/ingest/sources";
 
@@ -21,7 +22,8 @@ export function ensureSeed(): void {
   for (const e of SEED_ENTITIES) insEnt.run(e.name, e.type, JSON.stringify(e.aliases));
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  if (!isAuthed(req)) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   ensureSeed();
   return NextResponse.json({ ok: true });
 }

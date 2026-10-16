@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { wlFetch } from "@/lib/client/fetch";
 import { useRouter } from "next/navigation";
 
 export function ActionsBar() {
@@ -15,7 +16,7 @@ export function ActionsBar() {
       kind === "ingest" ? "采集中…" : kind === "distill" ? "蒸馏中（LLM 推理，约 1-5 分钟）…" : "寻找今日精读文章…"
     );
     try {
-      const res = await fetch(`/api/${kind}`, { method: "POST" });
+      const res = await wlFetch(`/api/${kind}`, { method: "POST" });
       const data = await res.json();
       if (!res.ok || data.ok === false) throw new Error(data.error ?? `HTTP ${res.status}`);
       if (kind === "ingest") {

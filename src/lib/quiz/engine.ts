@@ -17,7 +17,7 @@ type QuizRow = {
   ai_verdict: string;
 };
 
-const NUGGET_TYPES = ["mechanism", "pattern", "fact", "counterexample", "judgment", "question"] as const;
+const NUGGET_TYPES = ["mechanism", "pattern", "fact", "counterexample", "judgment", "question", "norm"] as const;
 const DOMAINS = ["finance", "ai", "tech"] as const;
 
 function parseJsonArray<T>(text: string): T[] {
@@ -153,7 +153,7 @@ export async function gradeAnswer(quizId: number, answer: string): Promise<strin
 4. 判定这条理解值得长期保存吗（日常琐事=0，机制/反例/可验证判断=1）
 最后必须单独输出一行机器可读元数据（格式严格，管道符分隔）：
 【META】type=mechanism|domain=finance|pass=1
-其中 type 取值：mechanism/pattern/fact/counterexample/judgment/question；domain 取值：finance/ai/tech；pass：值得长期保存=1 否则=0
+其中 type 取值：mechanism/pattern/fact/counterexample/judgment/question/norm；domain 取值：finance/ai/tech；pass：值得长期保存=1 否则=0
 用中文，点评部分总共不超过 200 字。`,
     `文章标题: ${row.title}\n文章(精炼稿): ${source.slice(0, 6000)}\n\n问题: ${row.question}\n标准要点: ${row.expects}\n\n读者回答: ${answer || "（空白）"}`,
     { maxTokens: 2048, temperature: 0.2, purpose: "grade_answer" }
@@ -177,10 +177,14 @@ export async function digestArticle(articleId: number): Promise<{ nuggets: numbe
     )
     .all(articleId) as unknown as QuizRow[];
 
-  const article = db.prepare(`SELECT title, domain, url FROM articles WHERE id = ?`).get(articleId) as unknown as
-    | { title: string; domain: string; url: string }
+  const article = db.prepare(`SELECT title, domain, url, source_kind FROM articles WHERE id = ?`).get(articleId) as unknown as
+    | { title: string; domain: string; url: string; source_kind: string }
     | undefined;
   if (!article) throw new Error("article not found");
+
+  // 口述/传闻来源的原子置信度打折：official 1.0 / anecdote 0.7 / rumor 0.5
+  const kindFactor = article.source_kind === "rumor" ? 0.5 : article.source_kind === "anecdote" ? 0.7 : 1.0;
+  const baseConf = Math.round(75 * kindFactor) / 100;
 
   let nuggets = 0;
   let cards = 0;
@@ -206,7 +210,7 @@ export async function digestArticle(articleId: number): Promise<{ nuggets: numbe
         corrected.slice(0, 500),
         `出自《${article.title}》。问：${q.question}`,
         meta.domain,
-        0.75,
+        baseConf,
         q.user_answer.slice(0, 1000),
         (q.ai_verdict || "").slice(0, 1200)
       ) as unknown as { lastInsertRowid: number | bigint };
@@ -242,6 +246,22 @@ export async function digestArticle(articleId: number): Promise<{ nuggets: numbe
         `INSERT INTO review_cards (nugget_id, question, answer, variant) VALUES (?, ?, ?, ?)`
       ).run(c.nid, c.q, c.a, variant);
       cards++;
+    }
+  }
+
+  // judgment 原子 → 生成预测对账卡（验证条件 + 验证日期）
+  const judgments = createdQ
+    .map((c) => ({ nid: c.nid, statement: c.a }))
+    .filter((x) => {
+      const t = db.prepare(`SELECT type FROM nuggets WHERE id = ?`).get(x.nid) as unknown as { type: string };
+      return t?.type === "judgment";
+    });
+  if (judgments.length > 0) {
+    try {
+      const { ensureVerifications } = await import("@/lib/verify/ledger");
+      await ensureVerifications(judgments);
+    } catch {
+      /* 对账生成失败不阻塞 */
     }
   }
 

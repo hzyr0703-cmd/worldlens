@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAuthed } from "@/lib/auth";
 import { distillDaily } from "@/lib/distill/engine";
 
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
+  if (!isAuthed(req)) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   const { date } = (await req.json().catch(() => ({}))) as { date?: string };
   try {
     const result = await distillDaily(date);

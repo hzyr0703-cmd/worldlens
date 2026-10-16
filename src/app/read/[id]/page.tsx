@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db";
 import GenerateQuizButton from "@/components/GenerateQuizButton";
+import SplitText from "@/components/SplitText";
 
 export const dynamic = "force-dynamic";
 
@@ -30,34 +31,37 @@ export default async function ReadPage({ params }: { params: Promise<{ id: strin
         文章池
       </a>
 
-      <header className="page-head mt-8">
-        <div className="flex items-center gap-2.5">
-          <span className={`tag ${article.domain === "finance" ? "tier-0" : "tier-2"}`}>
-            {article.domain === "ai" ? "AI" : article.domain === "tech" ? "科技" : "财经"}
-          </span>
-          <span className="mono text-[11px] text-zinc-400 tabular-nums">
-            {article.word_count} 字
-          </span>
+      <header className="page-head relative mt-8">
+        <div className="grid-veil pointer-events-none absolute inset-x-0 -top-6 h-[220px]" aria-hidden />
+        <div className="relative">
+          <div className="flex items-center gap-2.5">
+            <span className={`tag ${article.domain === "finance" ? "tier-0" : "tier-2"}`}>
+              {article.domain === "ai" ? "AI" : article.domain === "tech" ? "科技" : "财经"}
+            </span>
+            <span className="mono text-[11px] text-zinc-400 tabular-nums">
+              {article.word_count} 字
+            </span>
+          </div>
+          <h1 className="text-[30px] sm:text-[38px] font-semibold leading-[1.14] tracking-[-0.032em] mt-5">
+            <SplitText text={article.title} />
+          </h1>
+          {article.url && (
+            <a
+              href={article.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[13px] text-[#007a8c] hover:underline break-all"
+            >
+              原文链接 ↗
+            </a>
+          )}
         </div>
-        <h1 className="text-[30px] sm:text-[38px] font-semibold leading-[1.14] tracking-[-0.032em] mt-5">
-          {article.title}
-        </h1>
-        {article.url && (
-          <a
-            href={article.url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-[13px] text-[#007a8c] hover:underline break-all"
-          >
-            原文链接 ↗
-          </a>
-        )}
       </header>
 
       <article className="page-body mt-10">
         <div className="read-body">{article.body}</div>
         {(article.original_body ?? "").trim().length > 0 && (
-          <details className="mt-10 border-t border-zinc-200 pt-6">
+          <details className="mt-10 border-t border-zinc-200 pt-6 group">
             <summary className="cursor-pointer text-[13.5px] text-zinc-500 hover:text-zinc-900 transition-colors select-none">
               查看未删减原文（{article.original_body.length} 字 · 与压缩版对照，确认要点无遗漏）
             </summary>
@@ -76,7 +80,7 @@ export default async function ReadPage({ params }: { params: Promise<{ id: strin
           </div>
         </div>
         {quizCount > 0 ? (
-          <a href={`/quiz/${article.id}`} className="btn-solid shrink-0">
+          <a href={`/quiz/${article.id}`} className="btn-solid shrink-0 magnetic">
             继续拷问 →
           </a>
         ) : (

@@ -4,8 +4,15 @@
 // RSSHub 公共实例默认走 hub.slarker.me（rsshub.app 国内不可达），可配置覆盖。
 // ---------------------------------------------------------------------------
 
-export const RSSHUB_BASE =
-  process.env.RSSHUB_BASE ?? "https://hub.slarker.me";
+/** RSSHub 公共镜像池：主镜像失败自动轮换下一台（rsshub.app 国内不可达，仅作末位） */
+export const RSSHUB_MIRRORS = [
+  process.env.RSSHUB_BASE ?? "",
+  "https://hub.slarker.me",
+  "https://rsshub.rssforever.com",
+  "https://rsshub.app",
+].filter(Boolean);
+
+export const RSSHUB_BASE = RSSHUB_MIRRORS[0];
 
 export type SeedSource = {
   name: string;

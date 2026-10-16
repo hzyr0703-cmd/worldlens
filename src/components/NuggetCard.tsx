@@ -5,11 +5,12 @@ export const TYPE_STYLE: Record<string, string> = {
   counterexample: "tier-0",  // 红（最值钱，最高亮）
   judgment: "tier-1",
   question: "tier-2",
+  norm: "tier-0",            // 潜规则：红系高亮（最值钱一类）
 };
 
 export const TYPE_CN: Record<string, string> = {
   mechanism: "机制", pattern: "模式", fact: "硬事实",
-  counterexample: "反例", judgment: "判断", question: "开放问题",
+  counterexample: "反例", judgment: "判断", question: "开放问题", norm: "潜规则",
 };
 
 const DOMAIN_CN: Record<string, string> = { finance: "财经", ai: "AI", tech: "科技" };

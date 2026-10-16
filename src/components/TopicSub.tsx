@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { wlFetch } from "@/lib/client/fetch";
 
 /** 主题订阅：设置关键词后，文章供给只收命中关键词的内容 */
 export default function TopicSub({ initial }: { initial: string[] }) {
@@ -12,7 +13,7 @@ export default function TopicSub({ initial }: { initial: string[] }) {
 
   async function persist(next: string[]) {
     setBusy(true);
-    await fetch("/api/prefs", {
+    await wlFetch("/api/prefs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key: "topic_keywords", value: next }),
