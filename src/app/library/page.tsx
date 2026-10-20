@@ -21,9 +21,12 @@ type Nugget = {
 export default async function LibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; type?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; page?: string }>;
 }) {
-  const { q, type } = await searchParams;
+  const { q, type, page } = await searchParams;
+  const pageNum = Math.max(1, Number(page ?? "1") || 1);
+  const PAGE_SIZE = 30;
+  const offset = (pageNum - 1) * PAGE_SIZE;
   const db = getDb();
 
   let all: Nugget[];
@@ -126,6 +129,42 @@ export default async function LibraryPage({
               ))}
             </div>
           </Reveal>
+        )}
+
+        {totalCount > PAGE_SIZE && (
+          <div className="flex items-center justify-center gap-2 mt-8">
+            {pageNum > 1 && (
+              <a href={`/library?${new URLSearchParams({ ...(q ? { q } : {}), ...(type ? { type } : {}), page: String(pageNum - 1) })}`} className="pill magnetic">
+                ← 上一页
+              </a>
+            )}
+            <span className="mono text-[12px] text-zinc-400 tabular-nums">
+              {pageNum} / {Math.ceil(totalCount / PAGE_SIZE)}
+            </span>
+            {offset + all.length < totalCount && (
+              <a href={`/library?${new URLSearchParams({ ...(q ? { q } : {}), ...(type ? { type } : {}), page: String(pageNum + 1) })}`} className="pill magnetic">
+                下一页 →
+              </a>
+            )}
+          </div>
+        )}
+
+        {totalCount > PAGE_SIZE && (
+          <div className="flex items-center justify-center gap-2 mt-8">
+            {pageNum > 1 && (
+              <a href={`/library?${new URLSearchParams({ ...(q ? { q } : {}), ...(type ? { type } : {}), page: String(pageNum - 1) })}`} className="pill magnetic">
+                ← 上一页
+              </a>
+            )}
+            <span className="mono text-[12px] text-zinc-400 tabular-nums">
+              {pageNum} / {Math.ceil(totalCount / PAGE_SIZE)}
+            </span>
+            {offset + all.length < totalCount && (
+              <a href={`/library?${new URLSearchParams({ ...(q ? { q } : {}), ...(type ? { type } : {}), page: String(pageNum + 1) })}`} className="pill magnetic">
+                下一页 →
+              </a>
+            )}
+          </div>
         )}
       </div>
     </div>

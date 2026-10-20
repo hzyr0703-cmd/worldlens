@@ -27,6 +27,12 @@ export async function register() {
       const sup = await curateAll();
       const r = await distillDaily();
       await buildDigest(); // 每日简报——最初设计的核心产出物
+      try {
+        const { getDb } = await import("@/lib/db");
+        getDb().exec("PRAGMA wal_checkpoint(TRUNCATE)"); // WAL 卫生：防止 WAL 无限膨胀
+      } catch {
+        /* checkpoint 失败不影响主流程 */
+      }
       const ms = Date.now() - started;
       const fetched = ing.reduce((s, x) => s + x.fetched, 0);
       const inserted = ing.reduce((s, x) => s + x.inserted, 0);

@@ -6,6 +6,30 @@ import { chat, parseJsonArray } from "@/lib/extract/llm";
 // 保证任何来源的原子都不会成为图谱孤岛。
 // ---------------------------------------------------------------------------
 
+
+/** 中文候选分词：英文/数字段直接成词；中文段按 4 字滑窗（步长 2）——
+ *  中文无空格，整句当一个 token 在 trigram FTS 里必然 0 命中。 */
+export function searchTerms(s: string, max = 10): string[] {
+  const clean = s.replace(/[，。、：；！？\s"'（）()【】\[\]]/g, " ");
+  const out: string[] = [];
+  for (const p of clean.split(" ").filter(Boolean)) {
+    if (/^[A-Za-z0-9]+$/.test(p) && p.length >= 3) {
+      out.push(p);
+      if (out.length >= max) break;
+      continue;
+    }
+    const cjk = p.replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, "");
+    if (cjk.length >= 3) {
+      const n = Math.min(4, cjk.length);
+      for (let i = 0; i + n <= cjk.length && out.length < max; i += 2) out.push(cjk.slice(i, i + n));
+    } else if (p.length >= 2) {
+      out.push(p);
+    }
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 const RELATIONS = ["supports", "contradicts", "explains", "extends", "analogy"] as const;
 const LINK_SYSTEM = `你是认知连接器。新原子与库内相关原子对照，判断它们之间的认知关系：
 - supports 佐证 / contradicts 矛盾 / explains 解释 / extends 延伸 / analogy 类比
@@ -30,7 +54,7 @@ export async function linkNewAtoms(
     if (!nugget) continue;
 
     // FTS 粗筛库内相关旧原子（trigram：≥3 字词），2 字词 LIKE 兜底
-    const terms = nugget.statement.replace(/[，。、：；！？\s]/g, " ").split(" ").filter((w) => w.length >= 2).slice(0, 8);
+    const terms = searchTerms(nugget.statement, 10);
     const longTerms = terms.filter((t) => t.length >= 3);
     const shortTerms = terms.filter((t) => t.length < 3);
     const seen = new Set<number>([nid]);

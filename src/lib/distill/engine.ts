@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db";
 import { chat, llmEnabled, parseJsonArray } from "@/lib/extract/llm";
+import { searchTerms } from "@/lib/links/engine";
 
 // ---------------------------------------------------------------------------
 // 认知蒸馏引擎 v3 — 信息易逝，认知原子沉淀。
@@ -85,7 +86,8 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 /** 库内 FTS 粗筛 top3 → bigram Jaccard ≥ 0.55 判为重复 */
 function findDuplicate(statement: string): { id: number } | null {
   const db = getDb();
-  const terms = statement.replace(/[，。、：；！？\s]/g, " ").split(" ").filter((w) => w.length >= 2).slice(0, 8);
+  
+  const terms = searchTerms(statement, 8);
   if (terms.length === 0) return null;
   // trigram 分词器只能 MATCH ≥3 字符；2 字词（"利率""光模块"）走 LIKE 兜底，两路合并
   const longTerms = terms.filter((t) => t.length >= 3);
@@ -197,9 +199,9 @@ export async function distillDaily(date?: string): Promise<DistillResult> {
         continue;
       }
 
-      const validSources = (c.source_ids ?? []).filter((id) =>
-        chunk.some((r) => r.id === id)
-      );
+      // 溯源兜底：LLM 给的 id 全部无效时，用整批 id（原子出自这批信息，可回查）
+      let validSources = (c.source_ids ?? []).filter((id) => chunk.some((r) => r.id === id));
+      if (validSources.length === 0) validSources = chunk.map((r) => r.id).slice(0, 8);
       const info = db
         .prepare(
           `INSERT INTO nuggets (type, statement, elaboration, domain, confidence, source_items, distill_date)
