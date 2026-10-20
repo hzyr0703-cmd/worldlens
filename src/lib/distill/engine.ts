@@ -237,73 +237,15 @@ export async function distillDaily(date?: string): Promise<DistillResult> {
     }
   }
 
-  // ---- Step 2: 连边 + 修正循环 ----
-  for (const nid of newIds) {
-    const nugget = db
-      .prepare(`SELECT id, type, statement, elaboration FROM nuggets WHERE id = ?`)
-      .get(nid) as unknown as { id: number; type: string; statement: string; elaboration: string };
-    if (!nugget) continue;
-
-    // FTS 粗筛库内相关旧原子（top 12）
-    const terms = nugget.statement.replace(/[，。、：；！？\s]/g, " ").split(" ").filter((w) => w.length >= 2).slice(0, 8);
-    let candidates: { id: number; statement: string }[] = [];
-    if (terms.length > 0) {
-      candidates = db
-        .prepare(
-          `SELECT n.id, n.statement FROM nuggets n
-           JOIN nuggets_fts f ON n.id = f.rowid
-           WHERE nuggets_fts MATCH ? AND n.id != ?
-           ORDER BY rank LIMIT 12`
-        )
-        .all(terms.map((t) => `"${t}"`).join(" OR "), nid) as unknown as {
-        id: number; statement: string;
-      }[];
-    }
-    if (candidates.length === 0) continue;
-
-    const prompt = `新原子:\n[idx:0] ${nugget.statement}\n\n库内原子:\n${candidates
-      .map((c) => `[id:${c.id}] ${c.statement}`)
-      .join("\n")}`;
-
-    const raw = await chat(LINK_SYSTEM, prompt, { maxTokens: 2048, temperature: 0.1, purpose: "link" });
-    let links = parseJsonArray<{
-      src_idx: number; dst_id: number; relation: string; rationale?: string;
-    }>(raw);
-    if (links.length === 0) {
-      const raw2 = await chat(LINK_SYSTEM, prompt, { maxTokens: 2048, temperature: 0.3, purpose: "link_retry" });
-      links = parseJsonArray<{ src_idx: number; dst_id: number; relation: string; rationale?: string }>(raw2);
-    }
-
-    for (const l of links) {
-      if (l.src_idx !== 0) continue;
-      if (!RELATIONS.includes(l.relation as (typeof RELATIONS)[number])) continue;
-      if (!candidates.some((c) => c.id === l.dst_id)) continue;
-
-      db.prepare(
-        `INSERT INTO nugget_links (src_id, dst_id, relation, rationale) VALUES (?, ?, ?, ?)
-         ON CONFLICT(src_id, dst_id, relation) DO NOTHING`
-      ).run(nid, l.dst_id, l.relation, (l.rationale ?? "").slice(0, 300));
-      result.links++;
-
-      if (l.relation === "supports") {
-        // 加权：低置信新原子只小幅上调旧原子（0.1 × 自身置信度）
-        const self = db.prepare(`SELECT confidence FROM nuggets WHERE id = ?`).get(nid) as unknown as { confidence: number };
-        const bump = 0.1 * Math.min(1, Math.max(0.2, self?.confidence ?? 0.6));
-        db.prepare(
-          `UPDATE nuggets SET confidence = MIN(0.95, confidence + ?), status = 'reinforced' WHERE id = ?`
-        ).run(bump, l.dst_id);
-        db.prepare(
-          `INSERT INTO worldview_log (nugget_id, action, detail, batch_date) VALUES (?, 'reinforced', ?, ?)`
-        ).run(l.dst_id, `被新原子佐证: ${nugget.statement.slice(0, 120)}`, d);
-        result.reinforced++;
-      } else if (l.relation === "contradicts") {
-        db.prepare(`UPDATE nuggets SET status = 'challenged' WHERE id = ?`).run(l.dst_id);
-        db.prepare(
-          `INSERT INTO worldview_log (nugget_id, action, detail, batch_date) VALUES (?, 'challenged', ?, ?)`
-        ).run(l.dst_id, `被新原子挑战: ${nugget.statement.slice(0, 120)} — ${(l.rationale ?? "").slice(0, 150)}`, d);
-        result.contradicted++;
-      }
-    }
+  // ---- Step 2: 连边 —— 统一走共享引擎（蒸馏/拷问同路） ----
+  try {
+    const { linkNewAtoms } = await import("@/lib/links/engine");
+    const lr = await linkNewAtoms(newIds, d);
+    result.links += lr.links;
+    result.reinforced += lr.reinforced;
+    result.contradicted += lr.contradicted;
+  } catch (e) {
+    console.error("[distill] link stage failed:", e instanceof Error ? e.message : String(e));
   }
 
   return result;

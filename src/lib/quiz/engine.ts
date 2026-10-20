@@ -262,6 +262,16 @@ export async function digestArticle(articleId: number): Promise<{
     }
   }
 
+  // 全部新原子 → 共享连边引擎入网（拷问原子与蒸馏原子同路，不再有孤岛）
+  if (createdQ.length > 0) {
+    try {
+      const { linkNewAtoms } = await import("@/lib/links/engine");
+      await linkNewAtoms(createdQ.map((c) => c.nid), new Date().toISOString().slice(0, 10));
+    } catch {
+      /* 连边失败不阻塞沉淀 */
+    }
+  }
+
   // judgment 原子 → 生成预测对账卡（验证条件 + 验证日期）
   const judgments = createdQ
     .map((c) => ({ nid: c.nid, statement: c.a }))
