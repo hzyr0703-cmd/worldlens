@@ -84,6 +84,22 @@ export function llmStatsToday(): { calls: number; fails: number; avgMs: number }
   }
 }
 
+/** 近 30 天按用途分组的调用统计（LLM 成本感知：调用分布 + 平均耗时） */
+export function llmStatsMonthly(): { purpose: string; calls: number; fails: number; avgMs: number }[] {
+  try {
+    const rows = getDb()
+      .prepare(
+        `SELECT purpose, COUNT(*) calls, SUM(CASE WHEN ok=0 THEN 1 ELSE 0 END) fails, AVG(ms) avgMs
+         FROM llm_log WHERE created_at >= datetime('now', '-30 days')
+         GROUP BY purpose ORDER BY calls DESC`
+      )
+      .all() as unknown as { purpose: string; calls: number; fails: number; avgMs: number | null }[];
+    return rows.map((r) => ({ purpose: r.purpose, calls: r.calls, fails: r.fails, avgMs: Math.round(r.avgMs ?? 0) }));
+  } catch {
+    return [];
+  }
+}
+
 /** JSON 数组容错解析：LLM 偶发在 JSON 前后加杂质（markdown 围栏/解释文字），
  *  贪婪正则会被文字里的 "]" 截断。策略：直接 parse → 围栏提取 → 渐进收缩 [ 起点/ ] 终点。 */
 export function parseJsonArray<T>(text: string): T[] {

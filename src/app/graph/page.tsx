@@ -14,9 +14,11 @@ export default function GraphPage() {
         desc="谁和谁总是一起出现？共现网络是理解利益结构的第一张地图——边的粗细代表 30 天内共同出现的强度。"
       />
       <div className="page-body">
-        <GraphErrorBoundary>
-          <GraphCanvas />
-        </GraphErrorBoundary>
+        <div className="card-in">
+          <GraphErrorBoundary>
+            <GraphCanvas />
+          </GraphErrorBoundary>
+        </div>
       </div>
     </div>
   );

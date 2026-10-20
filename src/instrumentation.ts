@@ -69,8 +69,27 @@ export async function register() {
 
   const wait = msUntilNextEightBJT();
   console.log(`[wl-cron] scheduled daily 08:00 BJT, first run in ${Math.round(wait / 3600000)}h`);
+
+  // 可靠性补跑：沙箱重启可能跨过 08:00（setTimeout 丢失）。启动后 60s 检查
+  // 今天（北京时间）是否已有成功记录，没有就立即补跑，再对齐下一个 08:00。
   setTimeout(() => {
-    void dailyRun();
-    setInterval(() => void dailyRun(), 24 * 3600_000);
-  }, wait);
+    (async () => {
+      try {
+        const { getDb } = await import("@/lib/db");
+        const done = getDb()
+          .prepare(`SELECT COUNT(*) c FROM cron_log WHERE run_date = date('now') AND ok = 1`)
+          .get() as unknown as { c: number };
+        if (done.c === 0) {
+          console.log("[wl-cron] no successful run today — catch-up starting");
+          await dailyRun();
+        }
+      } catch (e) {
+        console.error("[wl-cron] catch-up check failed:", e instanceof Error ? e.message : String(e));
+      }
+      setTimeout(() => {
+        void dailyRun();
+        setInterval(() => void dailyRun(), 24 * 3600_000);
+      }, wait);
+    })();
+  }, 60_000);
 }

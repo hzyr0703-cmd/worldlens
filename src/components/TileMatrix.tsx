@@ -118,15 +118,20 @@ function TileColumn({ items, down, dur, hideBelowLg }: {
 }
 
 const POLL_MS = 60_000;
+/** 每批条数（与 API 的 limit 一致），"换一批"按批循环 */
+const BATCH = 42;
 
 export default function TileMatrix({ initialTiles }: { initialTiles: TileData[] }) {
   const [tiles, setTiles] = useState<TileData[]>(initialTiles);
   const snapshot = useRef(JSON.stringify(initialTiles));
+  const [offset, setOffset] = useState(0);
+  const [shifting, setShifting] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(async () => {
       try {
-        const res = await fetch("/api/live-tiles", { cache: "no-store" });
+        // 轮询永远拉最新一批；用户手动换批后，offset 会覆盖回来（下一轮回到最新）
+        const res = await fetch(`/api/live-tiles?offset=${offset}`, { cache: "no-store" });
         if (!res.ok) return;
         const data = (await res.json()) as { tiles?: TileData[] };
         if (!data.tiles?.length) return;
@@ -139,18 +144,61 @@ export default function TileMatrix({ initialTiles }: { initialTiles: TileData[] 
       }
     }, POLL_MS);
     return () => clearInterval(timer);
-  }, []);
+  }, [offset]);
+
+  /** 换一批：向后翻页循环（到底回第一批），立即拉取不打断动画节奏 */
+  const shift = async () => {
+    if (shifting) return;
+    setShifting(true);
+    try {
+      const nextOffset = offset + BATCH;
+      const res = await fetch(`/api/live-tiles?offset=${nextOffset}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = (await res.json()) as { tiles?: TileData[] };
+        if (data.tiles?.length && data.tiles.length >= 12) {
+          snapshot.current = JSON.stringify(data.tiles);
+          setTiles(data.tiles);
+          setOffset(nextOffset);
+        } else {
+          // 到底了：回到第一批
+          const res2 = await fetch("/api/live-tiles", { cache: "no-store" });
+          if (res2.ok) {
+            const d2 = (await res2.json()) as { tiles?: TileData[] };
+            if (d2.tiles?.length) {
+              snapshot.current = JSON.stringify(d2.tiles);
+              setTiles(d2.tiles);
+              setOffset(0);
+            }
+          }
+        }
+      }
+    } catch {
+      /* 失败保持现状 */
+    } finally {
+      setShifting(false);
+    }
+  };
 
   const cols = splitCols(tiles);
 
   return (
-    <div className="hero-matrix parallax mt-12 sm:mt-20 grid grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 h-[340px] sm:h-[520px]">
-      <TileColumn items={cols[0]} dur="52s" />
-      <TileColumn items={cols[1]} down dur="61s" />
-      <TileColumn items={cols[2]} dur="44s" />
-      <TileColumn items={cols[3]} down dur="56s" hideBelowLg />
-      <TileColumn items={cols[4]} dur="64s" hideBelowLg />
-      <TileColumn items={cols[5]} down dur="48s" hideBelowLg />
-    </div>
+    <>
+      <div className="hero-matrix parallax mt-12 sm:mt-20 grid grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 h-[340px] sm:h-[520px]">
+        <TileColumn items={cols[0]} dur="52s" />
+        <TileColumn items={cols[1]} down dur="61s" />
+        <TileColumn items={cols[2]} dur="44s" />
+        <TileColumn items={cols[3]} down dur="56s" hideBelowLg />
+        <TileColumn items={cols[4]} dur="64s" hideBelowLg />
+        <TileColumn items={cols[5]} down dur="48s" hideBelowLg />
+      </div>
+
+      {/* 手动换一批：向后循环取数 */}
+      <div className="mt-6 flex justify-center">
+        <button onClick={shift} disabled={shifting} className="pill magnetic !py-2 !px-4">
+          {shifting ? "换一批…" : "换一批"}
+          <span className="mono text-[11px] text-zinc-400">{shifting ? "" : " ↻"}</span>
+        </button>
+      </div>
+    </>
   );
 }

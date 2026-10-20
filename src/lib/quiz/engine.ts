@@ -169,7 +169,12 @@ export async function gradeAnswer(quizId: number, answer: string): Promise<strin
 }
 
 /** Step 3: 全卷完成 → 有价值(pass=1)的回答沉淀为原子 + FSRS 卡 + 变式卡 */
-export async function digestArticle(articleId: number): Promise<{ nuggets: number; cards: number; skipped: number }> {
+export async function digestArticle(articleId: number): Promise<{
+  nuggets: number;
+  cards: number;
+  skipped: number;
+  skippedList: { question: string; reason: string }[];
+}> {
   const db = getDb();
   const answered = db
     .prepare(
@@ -190,6 +195,7 @@ export async function digestArticle(articleId: number): Promise<{ nuggets: numbe
   let nuggets = 0;
   let cards = 0;
   let skipped = 0;
+  const skippedList: { question: string; reason: string }[] = [];
   const createdQ: { q: string; a: string; nid: number }[] = [];
 
   for (const q of answered) {
@@ -197,6 +203,12 @@ export async function digestArticle(articleId: number): Promise<{ nuggets: numbe
     // 旧格式 verdict（无 META）或 pass=0：不生成原子，避免污染类型系统
     if (!meta || !meta.pass) {
       skipped++;
+      skippedList.push({
+        question: q.question.slice(0, 60),
+        reason: meta
+          ? "阅卷判定未达标——回答与原文要点差距较大，不生成原子以免污染类型系统"
+          : "阅卷缺少结构化结论（META 行），无法提取原子",
+      });
       continue;
     }
 
@@ -266,7 +278,7 @@ export async function digestArticle(articleId: number): Promise<{ nuggets: numbe
     }
   }
 
-  return { nuggets, cards, skipped };
+  return { nuggets, cards, skipped, skippedList };
 }
 
 function extractCorrection(verdict: string): string {

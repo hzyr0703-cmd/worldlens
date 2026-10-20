@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { llmStatsMonthly } from "@/lib/extract/llm";
 import PageHead from "@/components/PageHead";
 import Reveal from "@/components/Reveal";
 
@@ -41,6 +42,38 @@ export default function LogPage() {
       />
 
       <div className="page-body">
+        {/* LLM 用量（近 30 天）：调用分布 + 失败率，成本感知 */}
+        {(() => {
+          const m = llmStatsMonthly();
+          if (m.length === 0) return null;
+          const total = m.reduce((s, x) => s + x.calls, 0);
+          const fails = m.reduce((s, x) => s + x.fails, 0);
+          return (
+            <div className="panel p-6 mb-8 reveal">
+              <div className="flex items-baseline justify-between">
+                <span className="sec-index mono">LLM · 近 30 天</span>
+                <span className="mono text-[11px] text-zinc-400 tabular-nums">
+                  共 {total} 次 · 失败 {fails} 次（{total ? Math.round((fails / total) * 100) : 0}%）
+                </span>
+              </div>
+              <div className="mt-4 space-y-2">
+                {m.map((x) => (
+                  <div key={x.purpose} className="flex items-center gap-3 text-[12.5px]">
+                    <span className="mono w-28 shrink-0 truncate text-zinc-500">{x.purpose}</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-[#00b8d4]/60"
+                        style={{ width: `${Math.max(2, Math.round((x.calls / total) * 100))}%` }}
+                      />
+                    </div>
+                    <span className="mono tabular-nums text-zinc-600 w-14 text-right">{x.calls} 次</span>
+                    <span className="mono tabular-nums text-zinc-400 w-16 text-right">≈{x.avgMs}ms</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
         {logs.length === 0 ? (
           <div className="empty">
             <p className="text-[15px] font-medium">尚无记录</p>

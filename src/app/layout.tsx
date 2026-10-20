@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 import MotionLayer from "@/components/MotionLayer";
+import MobileMenu from "@/components/MobileMenu";
+import OfflineBanner from "@/components/OfflineBanner";
 
 export const metadata: Metadata = {
   title: "WorldLens · 认知复利引擎",
@@ -34,7 +36,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <span className="text-[15px] font-semibold tracking-[-0.01em]">WorldLens</span>
             </Link>
 
-            <nav className="hidden md:flex items-center gap-1 text-[13.5px]">
+            {/* 横向导航只在 lg 以上出现——768~1024px 会被 flex 压成竖排单字 */}
+            <nav className="hidden lg:flex items-center gap-1 text-[13.5px]">
               {NAV.map((l) => (
                 <a
                   key={l.href}
@@ -47,15 +50,24 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             </nav>
 
             <div className="flex items-center gap-2 shrink-0">
-              <a href="/inbox" className="ghost hidden sm:inline-flex magnetic">
+              {/* 移动端腾出空间：投喂文章收进菜单，CTA 缩小 */}
+              <a href="/inbox" className="ghost hidden lg:inline-flex magnetic">
                 投喂文章
               </a>
-              <a href="/review" className="cta magnetic">
+              <a href="/review" className="cta magnetic !px-3.5 !py-2 sm:!px-4 sm:!py-2.5 !text-[12.5px] sm:!text-[13px]">
                 开始复习
               </a>
             </div>
           </div>
         </header>
+
+        {/* PWA 离线横幅 + SW 注册（sticky 挂在顶栏正下方） */}
+        <OfflineBanner />
+
+        {/*汉堡按钮 + 全屏菜单。必须渲染在 header 之外：
+            header 的 backdrop-blur-xl 会成为 fixed 后代的定位参照，
+            放在 header 内会让 fixed inset-0 退化成 56px 高。 */}
+        <MobileMenu items={NAV} cta={{ href: "/review", label: "开始复习" }} />
 
         <main className="flex-1 w-full max-w-[1240px] mx-auto px-6 py-12 sm:py-16 page-enter">
           {children}

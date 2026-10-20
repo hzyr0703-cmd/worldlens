@@ -13,7 +13,9 @@ export default function ReviewPage() {
         desc="FSRS 间隔重复调度。凭记忆作答，答错不惩罚——错误信息才是复习价值最高的部分。"
       />
       <div className="page-body">
-        <ReviewSession />
+        <div className="card-in">
+          <ReviewSession />
+        </div>
       </div>
     </div>
   );

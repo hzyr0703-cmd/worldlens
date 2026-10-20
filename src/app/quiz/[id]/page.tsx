@@ -1,6 +1,7 @@
 import { getDb } from "@/lib/db";
 import { QuizRunner } from "@/components/QuizRunner";
 import GenerateQuizButton from "@/components/GenerateQuizButton";
+import SplitText from "@/components/SplitText";
 
 export const dynamic = "force-dynamic";
 
@@ -44,25 +45,32 @@ export default async function QuizPage({ params }: { params: Promise<{ id: strin
         回看原文
       </a>
 
-      <header className="page-head mt-8">
-        <div className="flex items-center gap-2.5">
-          <span className="sec-index mono">拷问</span>
-          <span className="h-px w-8 bg-zinc-300" />
-          <span className="mono text-[11px] text-zinc-400 tabular-nums">
-            {article.body.length} 字原文
-          </span>
+      <header className="page-head relative mt-8">
+        {/* 淡方格底纹，与全站页头一致 */}
+        <div className="grid-veil pointer-events-none absolute inset-x-0 -top-6 h-[220px]" aria-hidden />
+        <div className="relative">
+          <div className="flex items-center gap-2.5">
+            <span className="sec-index mono">拷问</span>
+            <span className="h-px w-8 bg-zinc-300" />
+            <span className="mono text-[11px] text-zinc-400 tabular-nums">
+              {article.body.length} 字原文
+            </span>
+          </div>
+          <h1 className="text-[26px] sm:text-[32px] font-semibold leading-[1.18] tracking-[-0.03em] mt-5">
+            <SplitText text={article.title} />
+          </h1>
+          <p
+            className="wipe text-[14px] text-zinc-500 mt-4 leading-relaxed"
+            style={{ ["--d" as string]: "260ms" }}
+          >
+            先读文章 → 凭记忆作答 → 阅卷修正。全部答完后，你的表述会沉淀为认知原子。
+          </p>
         </div>
-        <h1 className="text-[26px] sm:text-[32px] font-semibold leading-[1.18] tracking-[-0.03em] mt-5">
-          {article.title}
-        </h1>
-        <p className="text-[14px] text-zinc-500 mt-4 leading-relaxed">
-          先读文章 → 凭记忆作答 → 阅卷修正。全部答完后，你的表述会沉淀为认知原子。
-        </p>
       </header>
 
       <div className="page-body mt-10">
         {quizzes.length === 0 ? (
-          <div className="empty">
+          <div className="empty card-in">
             <p className="text-[15px] font-medium">这篇文章还没有拷问题</p>
             <p className="text-[13.5px] text-zinc-500 mt-2 max-w-[42ch] mx-auto leading-relaxed">
               让 AI 就本文出 4-6 道简答题，覆盖机制、反例和判断。
@@ -72,12 +80,14 @@ export default async function QuizPage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
         ) : (
-          <QuizRunner articleId={article.id} quizzes={quizzes} />
+          <div className="card-in">
+            <QuizRunner articleId={article.id} quizzes={quizzes} />
+          </div>
         )}
       </div>
 
       {article.url && (
-        <p className="mono text-[11px] text-zinc-400 text-center mt-10">
+        <p className="mono text-[11px] text-zinc-400 text-center mt-10 reveal-5 reveal">
           原文 · {article.url} — 复习时才允许回看
         </p>
       )}

@@ -34,7 +34,7 @@ export default async function ReadPage({ params }: { params: Promise<{ id: strin
       <header className="page-head relative mt-8">
         <div className="grid-veil pointer-events-none absolute inset-x-0 -top-6 h-[220px]" aria-hidden />
         <div className="relative">
-          <div className="flex items-center gap-2.5">
+          <div className="wipe flex items-center gap-2.5" style={{ ["--d" as string]: "200ms" }}>
             <span className={`tag ${article.domain === "finance" ? "tier-0" : "tier-2"}`}>
               {article.domain === "ai" ? "AI" : article.domain === "tech" ? "科技" : "财经"}
             </span>
@@ -70,7 +70,7 @@ export default async function ReadPage({ params }: { params: Promise<{ id: strin
         )}
       </article>
 
-      <div className="mt-14 flex flex-wrap items-center justify-between gap-5 panel px-7 py-6">
+      <div className="mt-14 flex flex-wrap items-center justify-between gap-5 panel px-7 py-6 card-in">
         <div>
           <div className="text-[15px] font-medium">读完了？</div>
           <div className="text-[13px] text-zinc-500 mt-1.5">

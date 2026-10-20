@@ -125,6 +125,7 @@ function findDuplicate(statement: string): { id: number } | null {
 export type DistillResult = {
   batches: number;
   scanned: number;
+  skipped: number;
   created: number;
   links: number;
   reinforced: number;
@@ -136,7 +137,7 @@ export async function distillDaily(date?: string): Promise<DistillResult> {
   ensureDistilledColumn();
   const db = getDb();
   const d = date ?? new Date().toISOString().slice(0, 10);
-  const result: DistillResult = { batches: 0, scanned: 0, created: 0, links: 0, reinforced: 0, contradicted: 0 };
+  const result: DistillResult = { batches: 0, scanned: 0, skipped: 0, created: 0, links: 0, reinforced: 0, contradicted: 0 };
 
   // ---- Step 1: 取未蒸馏 items（ASC：积压时旧条目也能轮到），分批喂给蒸馏引擎 ----
   const rows = db
@@ -159,12 +160,25 @@ export async function distillDaily(date?: string): Promise<DistillResult> {
     result.batches++;
     result.scanned += chunk.length;
 
-    const raw = await chat(DISTILL_SYSTEM, text, { maxTokens: 4096, temperature: 0.2, purpose: "distill" });
-    let candidates = parseJsonArray<RawNugget>(raw).slice(0, 4); // 偏精：单批上限 4
-    if (candidates.length === 0) {
-      // JSON 失败重试一次（温度+0.2）
-      const raw2 = await chat(DISTILL_SYSTEM, text, { maxTokens: 4096, temperature: 0.4, purpose: "distill_retry" });
-      candidates = parseJsonArray<RawNugget>(raw2).slice(0, 4);
+    let candidates: RawNugget[] = [];
+    try {
+      const raw = await chat(DISTILL_SYSTEM, text, { maxTokens: 4096, temperature: 0.2, purpose: "distill" });
+      candidates = parseJsonArray<RawNugget>(raw).slice(0, 4); // 偏精：单批上限 4
+      if (candidates.length === 0) {
+        // JSON 失败重试一次（温度+0.2）
+        const raw2 = await chat(DISTILL_SYSTEM, text, { maxTokens: 4096, temperature: 0.4, purpose: "distill_retry" });
+        candidates = parseJsonArray<RawNugget>(raw2).slice(0, 4);
+      }
+    } catch (e) {
+      // 内容安全过滤（智谱 1301 等）或其他 LLM 错误：跳过该批但不阻塞队列，
+      // 标记 distilled = 2（skipped），避免敏感批永远卡在队列头部
+      const msg = e instanceof Error ? e.message : String(e);
+      db.prepare(
+        `UPDATE items SET distilled = 2 WHERE id IN (${chunk.map(() => "?").join(",")})`
+      ).run(...chunk.map((r) => r.id));
+      result.batches--; result.scanned -= chunk.length; result.skipped += chunk.length;
+      console.error(`[distill] batch skipped (content-filter or LLM error): ${msg.slice(0, 120)}`);
+      continue;
     }
 
     for (const c of candidates) {

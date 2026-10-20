@@ -77,6 +77,9 @@ export function pendingVerifyCount(): number {
   ).n;
 }
 
+/** 最近一次评分的快照：供 5 秒内撤销（个人工具，单用户，内存快照即可；重启自然失效） */
+let lastGrade: { cardId: number; prevState: string; prevDue: string; logId: number | bigint } | null = null;
+
 export function gradeCard(cardId: number, rating: Grade): Card {
   const db = getDb();
   const row = db.prepare(`SELECT * FROM review_cards WHERE id = ?`).get(cardId) as unknown as
@@ -87,6 +90,8 @@ export function gradeCard(cardId: number, rating: Grade): Card {
   const card = deserialize(row.fsrs_state);
   const schedule = f.repeat(card, new Date())[rating];
   const next = schedule.card;
+  const prevState = row.fsrs_state;
+  const prevDue = row.due;
 
   db.prepare(
     `UPDATE review_cards SET fsrs_state = ?, due = ? WHERE id = ?`
@@ -95,8 +100,27 @@ export function gradeCard(cardId: number, rating: Grade): Card {
     next.due.toISOString().slice(0, 19).replace("T", " "),
     cardId
   );
-  db.prepare(`INSERT INTO review_log (card_id, rating) VALUES (?, ?)`).run(cardId, rating);
+  const log = db.prepare(`INSERT INTO review_log (card_id, rating) VALUES (?, ?)`).run(cardId, rating) as unknown as {
+    lastInsertRowid: number | bigint;
+  };
+  lastGrade = { cardId, prevState, prevDue, logId: log.lastInsertRowid };
   return next;
+}
+
+/** 撤销最近一次评分：还原 FSRS 快照 + 删除 review_log 记录。非最近一次评分时拒绝。 */
+export function undoLastGrade(cardId: number): { ok: boolean; error?: string } {
+  if (!lastGrade || lastGrade.cardId !== cardId) {
+    return { ok: false, error: "只能撤销最近一次评分" };
+  }
+  const db = getDb();
+  db.prepare(`UPDATE review_cards SET fsrs_state = ?, due = ? WHERE id = ?`).run(
+    lastGrade.prevState,
+    lastGrade.prevDue,
+    cardId
+  );
+  db.prepare(`DELETE FROM review_log WHERE id = ?`).run(lastGrade.logId);
+  lastGrade = null;
+  return { ok: true };
 }
 
 /** 复习动力统计：今日 / 累计 / 连续天数 */

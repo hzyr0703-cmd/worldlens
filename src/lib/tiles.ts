@@ -18,7 +18,7 @@ export type TileData = {
 
 const CJK = /[\u4e00-\u9fff]/;
 
-export function getLiveTiles(limit = 42, maxEnglish = 4): TileData[] {
+export function getLiveTiles(limit = 42, maxEnglish = 4, offset = 0): TileData[] {
   const db = getDb();
   const rows = db
     .prepare(
@@ -26,9 +26,9 @@ export function getLiveTiles(limit = 42, maxEnglish = 4): TileData[] {
               date(COALESCE(i.published_at, i.fetched_at)) AS date
        FROM items i JOIN sources s ON s.id = i.source_id
        WHERE length(i.title) > 4
-       ORDER BY i.id DESC LIMIT 150`
+       ORDER BY i.id DESC LIMIT ? OFFSET ?`
     )
-    .all() as unknown as TileData[];
+    .all(limit + offset, offset) as unknown as TileData[];
 
   // node:sqlite 返回的行是 null-prototype 对象，直接传给 Client Components
   // 会被 React 序列化校验拒绝（"Classes or null prototypes are not supported"），

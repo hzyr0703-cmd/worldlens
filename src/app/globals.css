@@ -930,3 +930,22 @@ body:has(.read-body) .reading-progress { opacity: 1; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============================================================
+   移动端全屏菜单（lg 以下）
+   ============================================================ */
+@keyframes menu-panel-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.menu-panel { animation: menu-panel-in 320ms var(--ease-smooth-out) both; }
+
+/* 列表项错峰上浮入场 */
+@keyframes menu-item-in {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.menu-item {
+  animation: menu-item-in 420ms var(--ease-smooth-out) backwards;
+  animation-delay: var(--d, 0ms);
+}

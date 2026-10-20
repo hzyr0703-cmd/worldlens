@@ -49,6 +49,8 @@ export default function ReviewSession() {
   const [error, setError] = useState("");
   const [recentItems, setRecentItems] = useState<FeedItem[]>([]);
   const [evidenceId, setEvidenceId] = useState<number | 0>(0);
+  // 评分撤销：5 秒窗口内可回滚最近一次 FSRS 评分
+  const [undoFor, setUndoFor] = useState<{ cardId: number; seconds: number } | null>(null);
 
   /** 把取回来的数据写进 state。挂载和作答后共用，避免逻辑分叉。 */
   const applyReview = useCallback((d: ReviewData) => {
@@ -99,6 +101,8 @@ export default function ReviewSession() {
       return;
     }
     setShowAnswer(false);
+    // 撤销窗口：5 秒内可回滚这次评分
+    setUndoFor({ cardId: card.id, seconds: 5 });
     if (idx + 1 >= cards.length) {
       await load();
       setDone(true);
@@ -106,6 +110,38 @@ export default function ReviewSession() {
       setIdx((i) => i + 1);
     }
   }
+
+  /** 执行撤销：还原 FSRS 快照，回到刚评过的那张卡（答案保持展开） */
+  async function undo() {
+    if (!undoFor) return;
+    const target = cards.findIndex((c) => c.id === undoFor.cardId);
+    setError("");
+    try {
+      const res = await wlFetch("/api/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "undo", cardId: undoFor.cardId }),
+      });
+      const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!res.ok || !data?.ok) throw new Error(data?.error ?? "撤销失败");
+      setUndoFor(null);
+      setShowAnswer(true);
+      if (target >= 0) setIdx(target);
+      // FSRS 已还原，不调 load()——避免队列被重排打断当前上下文
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setUndoFor(null);
+    }
+  }
+
+  // 撤销窗口倒计时（setState 只出现在 setTimeout 回调里，异步安全）
+  useEffect(() => {
+    if (!undoFor) return;
+    const t = setTimeout(() => {
+      setUndoFor((u) => (!u ? null : u.seconds <= 1 ? null : { ...u, seconds: u.seconds - 1 }));
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [undoFor]);
 
   async function settle(outcome: "confirmed" | "refuted" | "unverifiable") {
     const card = cards[idx];
@@ -222,6 +258,16 @@ export default function ReviewSession() {
   return (
     <div className="max-w-[680px] mx-auto">
       <ProgressRail cards={cards} idx={idx} />
+
+      {/* 撤销窗口：手滑评分后 5 秒内可回滚（还原 FSRS 快照 + 删 review_log） */}
+      {undoFor && (
+        <div className="mb-3 flex items-center justify-center gap-2 text-[12.5px] text-zinc-500">
+          <span>
+            已评分 · <button onClick={undo} className="underline underline-offset-2 hover:text-zinc-900 transition-colors">撤销</button>
+          </span>
+          <span className="mono tabular-nums text-zinc-400">{undoFor.seconds}s</span>
+        </div>
+      )}
 
       {/* key={card.id}：换卡时整块重新入场，这是作答流程最重要的转场 */}
       <div className="panel p-7 sm:p-10 text-center card-swap" key={`q-${card.id}`}>

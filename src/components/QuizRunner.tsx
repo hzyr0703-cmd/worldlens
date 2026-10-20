@@ -29,7 +29,12 @@ export function QuizRunner({ articleId, quizzes }: { articleId: number; quizzes:
   const [answer, setAnswer] = useState("");
   const [verdict, setVerdict] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [digested, setDigested] = useState<{ nuggets: number; cards: number; skipped: number } | null>(null);
+  const [digested, setDigested] = useState<{
+    nuggets: number;
+    cards: number;
+    skipped: number;
+    skippedList?: { question: string; reason: string }[];
+  } | null>(null);
   const [error, setError] = useState("");
 
   const done = idx >= quizzes.length;
@@ -87,8 +92,18 @@ export function QuizRunner({ articleId, quizzes }: { articleId: number; quizzes:
       <div className="panel p-10 text-center panel-in">
         <p className="text-[17px] font-semibold tracking-[-0.015em]">本次精读沉淀完成</p>
         <p className="text-[14px] text-zinc-500 mt-3 leading-relaxed">
-          {digested.nuggets} 个认知原子已入库（带着你的原话与修正差异）· {digested.cards} 张复习卡片已进入 FSRS 队列{digested.skipped > 0 ? ` · ${digested.skipped} 条判定为日常信息未沉淀` : ""}
+          {digested.nuggets} 个认知原子已入库（带着你的原话与修正差异）· {digested.cards} 张复习卡片已进入 FSRS 队列{digested.skipped > 0 ? ` · ${digested.skipped} 条未沉淀` : ""}
         </p>
+        {digested.skippedList && digested.skippedList.length > 0 && (
+          <div className="mt-5 text-left space-y-2 max-w-[52ch] mx-auto">
+            {digested.skippedList.map((s, i) => (
+              <div key={i} className="text-[12.5px] text-zinc-500 border-l-2 border-zinc-200 pl-3 py-1">
+                <span className="text-zinc-700 font-medium">「{s.question}…」</span>
+                <span className="block mt-0.5">{s.reason}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap justify-center gap-3 mt-7">
           <a href="/review" className="btn-solid magnetic">
             开始第一次复习 →

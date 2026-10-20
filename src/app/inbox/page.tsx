@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db";
 import PasteArticle from "@/components/PasteArticle";
+import BackfillButton from "@/components/BackfillButton";
 import PageHead from "@/components/PageHead";
 import Reveal from "@/components/Reveal";
 import TopicSub from "@/components/TopicSub";
@@ -28,6 +29,15 @@ export default function InboxPage() {
     )
     .all() as unknown as (ArticleRow & { quiz_count: number; answered: number })[];
 
+  // 待补蒸馏的信息积压量（distilled 标记在 items 表上；articles 是粘贴长文，另行处理）
+  const pendingDistill = (
+    db
+      .prepare(
+        `SELECT COUNT(*) AS c FROM items WHERE distilled = 0 AND length(content) >= 800`
+      )
+      .get() as unknown as { c: number }
+  ).c;
+
   const longItems = db
     .prepare(
       `SELECT id, title, length(content) AS len FROM items
@@ -49,6 +59,7 @@ export default function InboxPage() {
 
       <div className="page-body space-y-6">
         <PasteArticle />
+        <BackfillButton count={pendingDistill} />
 
         <TopicSub
           initial={JSON.parse(
