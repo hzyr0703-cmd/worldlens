@@ -103,7 +103,17 @@ ${chainsText.slice(0, 3000)}
   "news": [{"title": "链条主题（≤20字）", "thesis": "核心判断一句话", "domain": "finance|ai|tech", "steps": [{"role": "trigger", "claim": "...", "item_ids": [125]}, {"role": "mechanism", "claim": "...", "item_ids": [125,126]}]}],
   "breaks": [{"chain_id": 3, "reason": "矛盾说明", "item_ids": [130]}]
 }
-纪律：每个 step 必须引用 A 中真实存在的 item id；claim 一句话说清该环节；mechanism 要写传导路径（为什么会从上一环走到这一环）；verify 环节给一个可查日期（YYYY-MM-DD）；没料就不输出对应字段（空数组）。`;
+纪律（严格，逐条检查）：
+1. 每个 step 必须引用 A 中真实存在的 item id。
+2. **role 的语义不能混**：
+   - trigger = 已发生的事实事件（谁做了什么，有明确主体与动作）
+   - mechanism = **因果传导路径**，必须写成「因为 X，导致 Y」（解释为什么会从上一环走到这一环），而不是"接下来发生了什么"
+   - effect = **已可观察到的现象**（价格变动/数据/行为结果），不能是"将会发生"
+   - verify = 未来可验证的推论，必须给日期（YYYY-MM-DD）
+3. 反例（禁止）：把「财长周三会见基金经理」写成 mechanism——这是日程进展，不是传导机制。
+   正例：mechanism =「基金被限制在 TEFAS 交易 → 资金转寻场外通道 → 监管进一步收紧处罚」。
+4. 若一条信息只能串出"事件进展"（A 出事、然后 B 出事、然后 C 开会），**不要建链**——那不是知识链，是新闻时间线。
+5. 没料就不输出对应字段（空数组）。`;
 
   let parsed: Record<string, unknown> | null = null;
   try {

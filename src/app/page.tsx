@@ -4,6 +4,7 @@ import { llmStatsToday } from "@/lib/extract/llm";
 import { pendingCount, pendingVerifyCount } from "@/lib/review/fsrs";
 import { detectConflicts } from "@/lib/radar/detect";
 import { renderMarkdown } from "@/lib/md";
+import { listChains } from "@/lib/chain/builder";
 import { ActionsBar } from "@/components/ActionsBar";
 import CountUp from "@/components/CountUp";
 import Hero from "@/components/Hero";
@@ -50,6 +51,27 @@ export default function Home() {
     .prepare(`SELECT content, stats FROM digests WHERE date = ?`)
     .get(today) as unknown as { content: string; stats: string } | undefined;
   const conflicts = detectConflicts(7, 6);
+  // 今日链条动态：今日有新增环节的链条 + 断裂链
+  const chainStats = db
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM chains) AS total,
+              (SELECT COUNT(*) FROM chains WHERE status = 'broken') AS broken,
+              (SELECT COUNT(DISTINCT chain_id) FROM chain_steps WHERE date(created_at) = date('now')) AS touched`
+    )
+    .get() as unknown as { total: number; broken: number; touched: number };
+  const todayChains = db
+    .prepare(
+      `SELECT c.id, c.title, c.thesis, c.status,
+              (SELECT COUNT(*) FROM chain_steps s WHERE s.chain_id = c.id) AS stepCount,
+              (SELECT s.claim FROM chain_steps s WHERE s.chain_id = c.id ORDER BY s.seq DESC LIMIT 1) AS lastStep,
+              (SELECT s.role FROM chain_steps s WHERE s.chain_id = c.id ORDER BY s.seq DESC LIMIT 1) AS lastRole
+       FROM chains c
+       WHERE c.id IN (SELECT DISTINCT chain_id FROM chain_steps WHERE date(created_at) = date('now'))
+       ORDER BY c.updated_at DESC LIMIT 4`
+    )
+    .all() as unknown as {
+    id: number; title: string; thesis: string; status: string; stepCount: number; lastStep: string; lastRole: string;
+  }[];
   const verifyDue = pendingVerifyCount();
   const llm = llmStatsToday();
   const sources = (
@@ -186,11 +208,55 @@ export default function Home() {
         )}
       </section>
 
+      {/* ═══ 01 · 今日链条动态 —— 信息点如何长成因果链 ═══ */}
+      <section className="mt-20 sm:mt-28">
+        <SectionHead
+          index="01"
+          kicker="Knowledge chains"
+          title="今天，哪些链条长出了新环节"
+          href="/chains"
+          linkText="全部链条"
+        />
+        {todayChains.length === 0 ? (
+          <div className="panel card-in p-8 text-center">
+            <p className="text-[14.5px] font-medium">今天还没有链条推进</p>
+            <p className="text-[13px] text-zinc-500 mt-2">
+              引擎在每日 08:00 与简报刷新后自动建链——信息至少能串出触发与机制两环，才会成链。
+            </p>
+          </div>
+        ) : (
+          <div className="stagger grid grid-cols-1 md:grid-cols-2 gap-4">
+            {todayChains.map((c) => (
+              <a key={c.id} href={`/chains?id=${c.id}`} className="panel card-in block p-5">
+                <div className="flex items-center gap-2">
+                  <span className={`tag ${c.status === "broken" ? "tier-0" : "tier-2"}`}>
+                    {c.status === "broken" ? "已断裂" : "演进中"}
+                  </span>
+                  <span className="mono text-[10.5px] text-zinc-400 tabular-nums">{c.stepCount} 环</span>
+                  <span className="mono ml-auto text-[10px] text-zinc-400">
+                    {c.lastRole === "mechanism" ? "机制" : c.lastRole === "effect" ? "现象" : c.lastRole === "trigger" ? "触发" : "验证"}
+                  </span>
+                </div>
+                <div className="mt-2.5 text-[14.5px] font-semibold leading-snug text-zinc-900">{c.title}</div>
+                {c.lastStep && (
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-zinc-500 line-clamp-2">最新一环：{c.lastStep}</p>
+                )}
+              </a>
+            ))}
+          </div>
+        )}
+        <div className="mt-4 flex items-center gap-4 text-[12px] text-zinc-400">
+          <span>累计 {chainStats.total} 条链</span>
+          <span>今日推进 {chainStats.touched} 条</span>
+          {chainStats.broken > 0 && <span className="text-[#b4232f]">{chainStats.broken} 条已断裂</span>}
+        </div>
+      </section>
+
       {/* ═══ 02 · 冲突雷达 —— 同一实体，多空对撞 ═══ */}
       {conflicts.length > 0 && (
         <section className="mt-20 sm:mt-28">
           <SectionHead
-            index="01"
+            index="02"
             kicker="Conflict Radar"
             title="同一件事，相反的说法"
           />
@@ -245,7 +311,7 @@ export default function Home() {
       <section>
         <Reveal>
           <SectionHead
-            index="02"
+            index="03"
             kicker="Queues"
             title="四个队列，构成一次完整训练"
           />
@@ -275,7 +341,7 @@ export default function Home() {
       <section>
         <Reveal>
           <SectionHead
-            index="03"
+            index="04"
             kicker="Reading"
             title="最新入库的深度文章"
             href="/inbox"
@@ -321,7 +387,7 @@ export default function Home() {
       <section>
         <Reveal>
           <SectionHead
-            index="04"
+            index="05"
             kicker="Nuggets"
             title="最近沉淀的认知原子"
             href="/library"

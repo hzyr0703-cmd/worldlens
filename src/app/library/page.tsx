@@ -2,6 +2,7 @@ import { getDb } from "@/lib/db";
 import NuggetCard, { TYPE_CN } from "@/components/NuggetCard";
 import NuggetActions from "@/components/NuggetActions";
 import PageHead from "@/components/PageHead";
+import { listChains } from "@/lib/chain/builder";
 import Reveal from "@/components/Reveal";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ export default async function LibraryPage({
   const PAGE_SIZE = 30;
   const offset = (pageNum - 1) * PAGE_SIZE;
   const db = getDb();
+  const chains = listChains(6);
 
   let all: Nugget[];
   if (q?.trim()) {
@@ -91,6 +93,70 @@ export default async function LibraryPage({
         desc="你的理解资产，随时间复利。每条原子都带着置信度、证据链和被修订的历史。"
         aside={<span className="pill">{totalCount} 枚原子</span>}
       />
+
+        {/* 知识链条（主） */}
+        {chains.length > 0 && (
+          <div className="mb-12">
+            <div className="mb-4 flex items-center gap-3">
+              <span className="sec-index mono">00</span>
+              <span className="h-px w-8 bg-zinc-300" />
+              <span className="sec-index mono uppercase tracking-[0.16em]">Knowledge chains</span>
+              <a href="/chains" className="pill ml-auto magnetic !text-[12px]">全部链条 →</a>
+            </div>
+            <div className="stagger grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {chains.map((c) => (
+                <a key={c.id} href={`/chains?id=${c.id}`} className="panel card-in block p-4">
+                  <div className="flex items-center gap-2">
+                    <span className={`tag !text-[10px] !py-0.5 ${c.status === "broken" ? "tier-0" : "tier-2"}`}>
+                      {c.status === "broken" ? "断裂" : "演进中"}
+                    </span>
+                    <span className="mono text-[10px] text-zinc-400 tabular-nums">{c.stepCount} 环</span>
+                  </div>
+                  <div className="mt-2 text-[13.5px] font-semibold leading-snug text-zinc-900 line-clamp-2">{c.title}</div>
+                  <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-500 line-clamp-2">{c.thesis}</p>
+                </a>
+              ))}
+            </div>
+            <div className="mt-8 mb-4 flex items-center gap-3">
+              <span className="sec-index mono">01</span>
+              <span className="h-px w-8 bg-zinc-300" />
+              <span className="sec-index mono uppercase tracking-[0.16em]">Atoms · 链条素材</span>
+              <span className="text-[12px] text-zinc-400 ml-2">机制/反例/硬事实——链条的砖块</span>
+            </div>
+          </div>
+        )}
+
+        {/* 知识链条（主） */}
+        {chains.length > 0 && (
+          <div className="mb-12">
+            <div className="mb-4 flex items-center gap-3">
+              <span className="sec-index mono">00</span>
+              <span className="h-px w-8 bg-zinc-300" />
+              <span className="sec-index mono uppercase tracking-[0.16em]">Knowledge chains</span>
+              <a href="/chains" className="pill ml-auto magnetic !text-[12px]">全部链条 →</a>
+            </div>
+            <div className="stagger grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {chains.map((c) => (
+                <a key={c.id} href={`/chains?id=${c.id}`} className="panel card-in block p-4">
+                  <div className="flex items-center gap-2">
+                    <span className={`tag !text-[10px] !py-0.5 ${c.status === "broken" ? "tier-0" : "tier-2"}`}>
+                      {c.status === "broken" ? "断裂" : "演进中"}
+                    </span>
+                    <span className="mono text-[10px] text-zinc-400 tabular-nums">{c.stepCount} 环</span>
+                  </div>
+                  <div className="mt-2 text-[13.5px] font-semibold leading-snug text-zinc-900 line-clamp-2">{c.title}</div>
+                  <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-500 line-clamp-2">{c.thesis}</p>
+                </a>
+              ))}
+            </div>
+            <div className="mt-8 mb-4 flex items-center gap-3">
+              <span className="sec-index mono">01</span>
+              <span className="h-px w-8 bg-zinc-300" />
+              <span className="sec-index mono uppercase tracking-[0.16em]">Atoms · 链条素材</span>
+              <span className="text-[12px] text-zinc-400 ml-2">机制/反例/硬事实——链条的砖块</span>
+            </div>
+          </div>
+        )}
 
       <div className="page-body">
         {/* 搜索 + 类型筛选 */}
