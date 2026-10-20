@@ -29,6 +29,9 @@ export async function register() {
       const sup = await curateAll();
       const r = await distillDaily();
       await buildDigest(); // 每日简报——最初设计的核心产出物
+      const { buildChains } = await import("@/lib/chain/builder");
+      const cr = await buildChains(); // 知识链条：信息点 → 因果链
+      console.log(`[wl-cron] chains: +${cr.created} new / +${cr.extended} steps / ${cr.broken} broken`);
       try {
         const { getDb } = await import("@/lib/db");
         getDb().exec("PRAGMA wal_checkpoint(TRUNCATE)"); // WAL 卫生：防止 WAL 无限膨胀
@@ -124,7 +127,9 @@ export async function register() {
       const old = row ? JSON.parse(row.stats ?? "{}").claims ?? 0 : -1;
       if (!row || claimsToday - old >= 20) {
         await buildDigest();
-        console.log(`[wl-live] digest refreshed (claims ${old} -> ${claimsToday})`);
+        const { buildChains } = await import("@/lib/chain/builder");
+        const cr = await buildChains();
+        console.log(`[wl-live] digest refreshed (claims ${old} -> ${claimsToday}) · chains +${cr.created}/${cr.extended}`);
       }
     } catch (e) {
       console.error("[wl-live] digest refresh failed:", e instanceof Error ? e.message : String(e));

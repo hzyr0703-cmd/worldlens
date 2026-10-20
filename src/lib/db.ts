@@ -67,6 +67,29 @@ function initSchema(db: DatabaseSync) {
       ms INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS chains (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      thesis TEXT NOT NULL,                      -- 核心判断（一句话）
+      domain TEXT DEFAULT 'finance',
+      status TEXT NOT NULL DEFAULT 'active',     -- active | resolved | broken
+      confidence REAL NOT NULL DEFAULT 0.6,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS chain_steps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chain_id INTEGER NOT NULL REFERENCES chains(id),
+      seq INTEGER NOT NULL,
+      role TEXT NOT NULL,                        -- trigger | mechanism | effect | verify
+      claim TEXT NOT NULL,                       -- 环节表述（压缩后，可溯源）
+      item_ids TEXT NOT NULL DEFAULT '[]',       -- 支撑该环节的 items（JSON 数组）
+      verify_by TEXT DEFAULT '',                 -- 待验证环节的验证日期
+      verified INTEGER NOT NULL DEFAULT 0,       -- 0 待验证 1 已证实 -1 已证伪
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_steps_chain ON chain_steps(chain_id, seq);
+    CREATE INDEX IF NOT EXISTS idx_chains_status ON chains(status, updated_at);
     CREATE TABLE IF NOT EXISTS prefs (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL

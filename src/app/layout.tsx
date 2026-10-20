@@ -35,6 +35,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/watch", label: "监控" },
       { href: "/watch", label: "监控" },
+      { href: "/chains", label: "链条" },
       { href: "/graph", label: "图谱" },
       { href: "/log", label: "日志" },
     ],
