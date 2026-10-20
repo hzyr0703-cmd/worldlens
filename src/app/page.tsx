@@ -163,7 +163,13 @@ export default function Home() {
         {digestRow ? (
           <div className="stagger">
             <div className="panel card-in p-6 sm:p-10">
-              <div className="sec-index mono mb-4">{today} · 引擎叙事</div>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-[#00b8d4] opacity-60 animate-ping" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#00b8d4]" />
+                </span>
+                <span className="sec-index mono">{today} · 实时引擎叙事 · 每小时随新信息重算</span>
+              </div>
               <div
                 className="digest-md text-[14px] text-zinc-700"
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(digestRow.content) }}

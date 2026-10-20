@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 import MotionLayer from "@/components/MotionLayer";
+import LiveRefresh from "@/components/LiveRefresh";
 import MobileMenu from "@/components/MobileMenu";
 import OfflineBanner from "@/components/OfflineBanner";
 
@@ -44,6 +45,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="zh-CN" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
         <MotionLayer />
+        <LiveRefresh />
 
         <header className="topbar sticky top-0 z-40 bg-white/85 backdrop-blur-xl border-b border-zinc-200">
           <div className="max-w-[1240px] mx-auto px-6 h-14 flex items-center justify-between gap-6">

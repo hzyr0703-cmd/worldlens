@@ -949,3 +949,9 @@ body:has(.read-body) .reading-progress { opacity: 1; }
   animation: menu-item-in 420ms var(--ease-smooth-out) backwards;
   animation-delay: var(--d, 0ms);
 }
+
+/* LiveRefresh 顶部扫光：数据更新时提示"引擎刚醒来" */
+@keyframes live-sweep {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
