@@ -65,7 +65,19 @@ async function fetchSourceOnce(source: {
 }, urlOverride?: string): Promise<IngestResult> {
   const db = getDb();
   try {
-    const feed = await parser.parseURL(urlOverride ?? source.url);
+    const target = urlOverride ?? source.url;
+    // 统一 fetch + 单源 15s 超时：慢源不拖死整批；SEC 要求合规 User-Agent
+    const ua = target.includes("sec.gov")
+      ? "WorldLens Research worldlens@example.com"
+      : "Mozilla/5.0 (compatible; WorldLens/1.0)";
+    const xml = await fetch(target, {
+      headers: { "User-Agent": ua },
+      signal: AbortSignal.timeout(15000),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.text();
+    });
+    const feed = await parser.parseString(xml);
     let inserted = 0;
     const fetched = feed.items.length;
 
@@ -124,10 +136,18 @@ export async function ingestAll(): Promise<IngestResult[]> {
     .prepare(`SELECT id, name, url, tier FROM sources WHERE enabled = 1`)
     .all() as unknown as { id: number; name: string; url: string; tier: number }[];
 
-  // 串行拉取避免公共 RSSHub 实例限流
+  // 每批 3 个并发：RSSHub 公共实例对 6 并发会限流（财联社实证 403）
   const results: IngestResult[] = [];
-  for (const s of sources) {
-    results.push(await fetchSource(s));
+  for (let i = 0; i < sources.length; i += 3) {
+    const batch = sources.slice(i, i + 3);
+    const settled = await Promise.allSettled(batch.map((s) => fetchSource(s)));
+    for (const [j, r] of settled.entries()) {
+      results.push(
+        r.status === "fulfilled"
+          ? r.value
+          : { source: batch[j].name, fetched: 0, inserted: 0, error: String(r.reason).slice(0, 80) }
+      );
+    }
   }
   return results;
 }

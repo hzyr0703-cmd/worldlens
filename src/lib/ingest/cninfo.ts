@@ -15,6 +15,9 @@ export const WATCH_KINDS: Record<string, { cn: string; keys: string[] }> = {
   penalty: { cn: "监管处罚", keys: ["处罚", "立案", "警示函", "罚款"] },
   bid: { cn: "招投标", keys: ["中标", "重大合同"] },
   personnel: { cn: "人事变动", keys: ["辞职", "聘任"] },
+  judicial: { cn: "司法风险", keys: ["诉讼", "仲裁", "被执行", "股权冻结"] },
+  risk: { cn: "风险提示", keys: ["资金占用", "退市风险", "违规担保"] },
+  deals: { cn: "关联交易", keys: ["关联交易", "对外担保"] },
 };
 
 type Announcement = {
@@ -50,7 +53,7 @@ async function fetchByKey(searchkey: string, pageSize = 15): Promise<Announcemen
       Referer: "http://www.cninfo.com.cn/new/commonUrl?url=disclosure/list/notice",
     },
     body,
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(12000),
   });
   if (!res.ok) return [];
   const data = (await res.json()) as { announcements?: Announcement[] };

@@ -13,9 +13,12 @@ type ItemRow = {
 };
 
 const KINDS = [
-  { key: "penalty", label: "监管处罚", cn: "处罚", desc: "立案、警示函、罚款——监管动手的痕迹" },
+  { key: "penalty", label: "监管处罚", cn: "监管处罚", desc: "立案、警示函、罚款——监管动手的痕迹" },
   { key: "bid", label: "招投标", cn: "招投标", desc: "中标与重大合同——订单流向即利益流向" },
   { key: "personnel", label: "人事变动", cn: "人事变动", desc: "辞职、聘任、换届——人走人留前总有信号" },
+  { key: "judicial", label: "司法风险", cn: "司法风险", desc: "诉讼、仲裁、被执行、股权冻结" },
+  { key: "risk", label: "风险提示", cn: "风险提示", desc: "资金占用、退市风险、违规担保" },
+  { key: "deals", label: "关联交易", cn: "关联交易", desc: "关联交易与对外担保——利益输送的常规通道" },
 ];
 
 export default async function WatchPage({
