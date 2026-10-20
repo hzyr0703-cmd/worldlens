@@ -2,7 +2,7 @@ import { getDb } from "@/lib/db";
 import { getLiveTiles } from "@/lib/tiles";
 import { llmStatsToday } from "@/lib/extract/llm";
 import { pendingCount, pendingVerifyCount } from "@/lib/review/fsrs";
-import { detectConflicts } from "@/lib/digest/radar";
+import { detectConflicts } from "@/lib/radar/detect";
 import { renderMarkdown } from "@/lib/md";
 import { ActionsBar } from "@/components/ActionsBar";
 import CountUp from "@/components/CountUp";

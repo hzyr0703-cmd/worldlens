@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
-import { distillDaily } from "@/lib/distill/engine";
+import { distillDaily } from "@/lib/distill/pipeline";
 
 export const maxDuration = 300;
 

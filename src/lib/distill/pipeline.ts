@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import { chat, llmEnabled, parseJsonArray } from "@/lib/extract/llm";
-import { searchTerms } from "@/lib/links/engine";
+import { searchTerms } from "@/lib/links/linker";
 
 // ---------------------------------------------------------------------------
 // 认知蒸馏引擎 v3 — 信息易逝，认知原子沉淀。
@@ -241,7 +241,7 @@ export async function distillDaily(date?: string): Promise<DistillResult> {
 
   // ---- Step 2: 连边 —— 统一走共享引擎（蒸馏/拷问同路） ----
   try {
-    const { linkNewAtoms } = await import("@/lib/links/engine");
+    const { linkNewAtoms } = await import("@/lib/links/linker");
     const lr = await linkNewAtoms(newIds, d);
     result.links += lr.links;
     result.reinforced += lr.reinforced;

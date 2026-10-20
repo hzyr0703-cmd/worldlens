@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { linkNewAtoms } from "@/lib/links/engine";
+import { linkNewAtoms } from "@/lib/links/linker";
 
 export const maxDuration = 300;
 

@@ -20,7 +20,7 @@ export async function register() {
       const { ensureSeed } = await import("@/app/api/seed/route");
       const { ingestAll } = await import("@/lib/ingest/rss");
       const { curateAll } = await import("@/lib/supply/curator");
-      const { distillDaily } = await import("@/lib/distill/engine");
+      const { distillDaily } = await import("@/lib/distill/pipeline");
       const { buildDigest } = await import("@/lib/digest/daily");
       ensureSeed();
       const ing = await ingestAll();

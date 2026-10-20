@@ -121,7 +121,7 @@ function initSchema(db: DatabaseSync) {
       entity_id INTEGER REFERENCES entities(id),
       text TEXT NOT NULL,                       -- 归一化后的原子主张
       polarity TEXT DEFAULT 'factual',          -- bullish | bearish | neutral | factual
-      verified INTEGER NOT NULL DEFAULT 0,      -- 双源印证标记（Phase 2 冲突雷达用）
+      verified INTEGER NOT NULL DEFAULT 0,      -- 双源印证标记（预留：T0/T1 双源证实同一主张时置 1）
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_claims_entity ON claims(entity_id);
@@ -144,16 +144,6 @@ function initSchema(db: DatabaseSync) {
       content TEXT NOT NULL,                    -- markdown
       stats TEXT DEFAULT '{}',                  -- JSON: items/entities/claims/verified
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS cards (          -- Phase 2: 间隔重复
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      claim_id INTEGER NOT NULL REFERENCES claims(id),
-      front TEXT NOT NULL,
-      back TEXT NOT NULL,
-      ease REAL NOT NULL DEFAULT 2.5,
-      interval_days INTEGER NOT NULL DEFAULT 0,
-      due TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     -- ===== v3: 认知复利引擎 =====

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
-import { generateQuiz, gradeAnswer, digestArticle } from "@/lib/quiz/engine";
+import { generateQuiz, gradeAnswer, digestArticle } from "@/lib/quiz/interrogator";
 
 export const maxDuration = 300;
 

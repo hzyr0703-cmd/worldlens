@@ -11,15 +11,33 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
 };
 
-const NAV = [
-  { href: "/", label: "首页" },
-  { href: "/inbox", label: "文章池" },
-  { href: "/review", label: "复习" },
-  { href: "/library", label: "认知库" },
-  { href: "/graph", label: "图谱" },
-  { href: "/feed", label: "快讯" },
-  { href: "/log", label: "日志" },
+/** 导航按使用节奏分三组：今日消费 / 深度加工 / 回查。
+ *  路由不变——只是把三种动线在视觉上分开，降低"该点哪"的认知负担。 */
+const NAV_GROUPS = [
+  {
+    group: "今日",
+    items: [
+      { href: "/", label: "首页" },
+      { href: "/feed", label: "快讯" },
+    ],
+  },
+  {
+    group: "加工",
+    items: [
+      { href: "/inbox", label: "文章池" },
+      { href: "/review", label: "复习" },
+      { href: "/library", label: "认知库" },
+    ],
+  },
+  {
+    group: "回查",
+    items: [
+      { href: "/graph", label: "图谱" },
+      { href: "/log", label: "日志" },
+    ],
+  },
 ];
+const NAV = NAV_GROUPS.flatMap((g) => g.items);
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -38,14 +56,19 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 
             {/* 横向导航只在 lg 以上出现——768~1024px 会被 flex 压成竖排单字 */}
             <nav className="hidden lg:flex items-center gap-1 text-[13.5px]">
-              {NAV.map((l) => (
-                <a
-                  key={l.href}
-                  href={l.href}
-                  className="nav-link px-3 py-1.5 rounded-full text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors duration-150"
-                >
-                  {l.label}
-                </a>
+              {NAV_GROUPS.map((g, gi) => (
+                <span key={g.group} className="flex items-center gap-1">
+                  {gi > 0 && <span className="w-px h-4 bg-zinc-200 mx-1.5" aria-hidden />}
+                  {g.items.map((l) => (
+                    <a
+                      key={l.href}
+                      href={l.href}
+                      className="nav-link px-3 py-1.5 rounded-full text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors duration-150"
+                    >
+                      {l.label}
+                    </a>
+                  ))}
+                </span>
               ))}
             </nav>
 
