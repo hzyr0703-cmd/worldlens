@@ -25,7 +25,7 @@ export const llmEnabled = Boolean(BASE_URL && API_KEY);
 export async function chat(
   system: string,
   user: string,
-  opts?: { maxTokens?: number; temperature?: number; purpose?: string }
+  opts?: { maxTokens?: number; temperature?: number; purpose?: string; model?: string }
 ): Promise<string> {
   if (!llmEnabled) throw new Error("LLM not configured");
   const t0 = Date.now();
@@ -38,7 +38,7 @@ export async function chat(
         Authorization: `Bearer ${API_KEY}`,
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: opts?.model ?? MODEL,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
@@ -52,10 +52,10 @@ export async function chat(
     const data = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
     };
-    logCall(purpose, MODEL, Date.now() - t0, 1, "");
+    logCall(purpose, opts?.model ?? MODEL, Date.now() - t0, 1, "");
     return data.choices?.[0]?.message?.content ?? "";
   } catch (e) {
-    logCall(purpose, MODEL, Date.now() - t0, 0, e instanceof Error ? e.message.slice(0, 200) : String(e));
+    logCall(purpose, opts?.model ?? MODEL, Date.now() - t0, 0, e instanceof Error ? e.message.slice(0, 200) : String(e));
     throw e;
   }
 }
