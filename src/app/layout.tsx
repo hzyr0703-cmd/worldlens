@@ -33,6 +33,8 @@ const NAV_GROUPS = [
   {
     group: "回查",
     items: [
+      { href: "/watch", label: "监控" },
+      { href: "/watch", label: "监控" },
       { href: "/graph", label: "图谱" },
       { href: "/log", label: "日志" },
     ],

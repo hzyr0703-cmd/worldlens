@@ -42,6 +42,11 @@ export async function fetchSource(source: {
   url: string;
   tier: number;
 }): Promise<IngestResult> {
+  // 非 RSS 源（如巨潮公告走独立采集器）跳过
+  if (!source.url.startsWith("http")) {
+    return { source: source.name, fetched: 0, inserted: 0, error: undefined };
+  }
+
   // RSSHub 路由失败时轮换公共镜像重试（直连源只有一个 URL，轮换等于原样重试一次）
   let lastErr: unknown = null;
   for (const mirror of RSSHUB_MIRRORS) {

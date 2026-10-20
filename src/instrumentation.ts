@@ -23,7 +23,9 @@ export async function register() {
       const { distillDaily } = await import("@/lib/distill/pipeline");
       const { buildDigest } = await import("@/lib/digest/daily");
       ensureSeed();
+      const { ingestCninfo } = await import("@/lib/ingest/cninfo");
       const ing = await ingestAll();
+      await ingestCninfo();
       const sup = await curateAll();
       const r = await distillDaily();
       await buildDigest(); // 每日简报——最初设计的核心产出物
@@ -83,11 +85,14 @@ export async function register() {
     try {
       const { ingestAll } = await import("@/lib/ingest/rss");
       const { extractPending } = await import("@/lib/extract/entities");
+      const { ingestCninfo } = await import("@/lib/ingest/cninfo");
       const ing = await ingestAll();
+      const cn = await ingestCninfo(); // 处罚/招投标/人事公告
       const inserted = ing.reduce((s, x) => s + x.inserted, 0);
-      if (inserted > 0) {
-        await extractPending(); // 新快讯立刻抽实体/主张，冲突雷达与简报才能看见
-        console.log(`[wl-live] +${inserted} items ingested & extracted`);
+      const cnAdded = Object.values(cn).reduce((s, n) => s + n, 0);
+      if (inserted + cnAdded > 0) {
+        await extractPending(); // 新信息立刻抽实体/主张，冲突雷达与简报才能看见
+        console.log(`[wl-live] +${inserted} rss / +${cnAdded} cninfo items ingested & extracted`);
       }
     } catch (e) {
       console.error("[wl-live] quick ingest failed:", e instanceof Error ? e.message : String(e));

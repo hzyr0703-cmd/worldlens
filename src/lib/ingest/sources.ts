@@ -22,6 +22,7 @@ export type SeedSource = {
 };
 
 export const SEED_SOURCES: SeedSource[] = [
+  { name: "巨潮·公告", url: "cninfo://announcement", tier: 0, category: "company" },
   // T1 权威财经快讯（中文主源）
   { name: "财联社·电报", url: `${RSSHUB_BASE}/cls/telegraph`, tier: 1, category: "macro" },
   { name: "华尔街见闻·直播", url: `${RSSHUB_BASE}/wallstreetcn/live`, tier: 1, category: "macro" },
