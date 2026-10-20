@@ -7,13 +7,13 @@ import { useRouter } from "next/navigation";
 export function ActionsBar() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [busy, setBusy] = useState<"ingest" | "distill" | "supply" | null>(null);
+  const [busy, setBusy] = useState<"ingest" | "distill" | "supply" | "digest" | null>(null);
   const [msg, setMsg] = useState("");
 
-  async function run(kind: "ingest" | "distill" | "supply") {
+  async function run(kind: "ingest" | "distill" | "supply" | "digest") {
     setBusy(kind);
     setMsg(
-      kind === "ingest" ? "采集中…" : kind === "distill" ? "蒸馏中（LLM 推理，约 1-5 分钟）…" : "寻找今日精读文章…"
+      kind === "ingest" ? "采集中…" : kind === "distill" ? "蒸馏中（LLM 推理，约 1-5 分钟）…" : kind === "digest" ? "生成今日简报（LLM 叙事，约 30 秒）…" : "寻找今日精读文章…"
     );
     try {
       const res = await wlFetch(`/api/${kind}`, { method: "POST" });
@@ -24,6 +24,8 @@ export function ActionsBar() {
         setMsg(`采集完成：${ok} 源成功`);
       } else if (kind === "supply") {
         setMsg(`供给完成：新增 ${data.added} 篇深度文章`);
+      } else if (kind === "digest") {
+        setMsg("今日简报已生成");
       } else {
         setMsg(
           `蒸馏完成：扫描 ${data.scanned} 条 → 新原子 ${data.created} · 连边 ${data.links} · 印证 ${data.reinforced} · 矛盾 ${data.contradicted}`
@@ -41,6 +43,13 @@ export function ActionsBar() {
 
   return (
     <div className="flex items-center gap-3 flex-wrap">
+      <button
+        onClick={() => run("digest")}
+        disabled={disabled}
+        className="btn-solid !py-2 !px-4 !text-[12.5px]"
+      >
+        {busy === "digest" ? "生成中…" : "生成今日简报"}
+      </button>
       <button
         onClick={() => run("ingest")}
         disabled={disabled}

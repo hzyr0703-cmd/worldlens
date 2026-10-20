@@ -21,15 +21,17 @@ export async function register() {
       const { ingestAll } = await import("@/lib/ingest/rss");
       const { curateAll } = await import("@/lib/supply/curator");
       const { distillDaily } = await import("@/lib/distill/engine");
+      const { buildDigest } = await import("@/lib/digest/daily");
       ensureSeed();
       const ing = await ingestAll();
       const sup = await curateAll();
       const r = await distillDaily();
+      await buildDigest(); // 每日简报——最初设计的核心产出物
       const ms = Date.now() - started;
       const fetched = ing.reduce((s, x) => s + x.fetched, 0);
       const inserted = ing.reduce((s, x) => s + x.inserted, 0);
       const articles = sup.reduce((s, x) => s + x.added, 0);
-      const detail = `采集 ${fetched}/入${inserted} · 文章 +${articles} · 原子 +${r.created} 连边 +${r.links} 印证 ${r.reinforced} 去重 ${r.contradicted}`;
+      const detail = `采集 ${fetched}/入${inserted} · 文章 +${articles} · 原子 +${r.created} 连边 +${r.links} 印证 ${r.reinforced} 去重 ${r.contradicted} · 简报✓`;
       console.log(`[wl-cron] daily run done in ${Math.round(ms / 1000)}s — ${detail}`);
       try {
         const { getDb } = await import("@/lib/db");
