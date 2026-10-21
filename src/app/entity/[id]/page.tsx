@@ -106,6 +106,11 @@ export default async function EntityPage({
       />
 
       <div className="page-body">
+        {entity.mention_count < 2 && (
+          <div className="mb-5 rounded-xl bg-[#fdf8ef] border border-[#f0e0c0] px-4 py-2.5 text-[12.5px] text-[#8a5a08]">
+            该主体仅被提及 {entity.mention_count} 次，可能是长尾噪音——图谱与搜索默认不展示这类实体，此页仅可通过直达链接访问。
+          </div>
+        )}
         <div className="mb-6 flex flex-wrap items-center gap-2">
           {TABS.map((t) => (
             <a

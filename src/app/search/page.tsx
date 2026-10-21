@@ -57,7 +57,7 @@ export default async function SearchPage({
     entities = db
       .prepare(
         `SELECT id, name, type, mention_count FROM entities
-         WHERE name LIKE ?
+         WHERE name LIKE ? AND mention_count >= 2
          ORDER BY mention_count DESC LIMIT 15`
       )
       .all(like) as unknown as EntityHit[];

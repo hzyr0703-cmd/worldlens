@@ -36,30 +36,44 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ mode, nodes, edges });
   }
 
-  // 默认：实体共现
-  const nodes = db
+  // 默认：实体共现 —— 从 claims 实时聚合（同一篇文章里同时出现的实体对）
+  // 比 edges 历史累积更准：只反映当前数据里的真实共现，不受历史噪音影响
+  const pairRows = db
     .prepare(
-      `SELECT e.id, e.name, e.type, e.mention_count as weight
-       FROM entities e
-       WHERE e.id IN (
-         SELECT src_id FROM edges WHERE last_seen >= datetime('now', '-30 day') AND weight >= 1
-         UNION
-         SELECT dst_id FROM edges WHERE last_seen >= datetime('now', '-30 day') AND weight >= 1
-       )
-       ORDER BY e.mention_count DESC LIMIT 60`
+      `SELECT c1.entity_id AS a, c2.entity_id AS b, COUNT(DISTINCT c1.item_id) AS w
+       FROM claims c1
+       JOIN claims c2 ON c1.item_id = c2.item_id AND c1.entity_id < c2.entity_id
+       JOIN entities e1 ON e1.id = c1.entity_id AND e1.mention_count >= 3
+       JOIN entities e2 ON e2.id = c2.entity_id AND e2.mention_count >= 3
+       WHERE date(COALESCE((SELECT published_at FROM items WHERE id = c1.item_id), '2000-01-01')) >= date('now', '-45 day')
+          OR (SELECT published_at FROM items WHERE id = c1.item_id) IS NULL
+       GROUP BY a, b
+       ORDER BY w DESC LIMIT 400`
     )
-    .all() as unknown as { id: number; name: string; type: string; weight: number }[];
+    .all() as unknown as { a: number; b: number; w: number }[];
+
+  // 节点：出现在边里的实体，按度数 + 提及次数排序取 60
+  const degree = new Map<number, number>();
+  for (const r of pairRows) {
+    degree.set(r.a, (degree.get(r.a) ?? 0) + 1);
+    degree.set(r.b, (degree.get(r.b) ?? 0) + 1);
+  }
+  const nodeRows = db
+    .prepare(
+      `SELECT id, name, type, mention_count FROM entities WHERE mention_count >= 3`
+    )
+    .all() as unknown as { id: number; name: string; type: string; mention_count: number }[];
+  const nodes = nodeRows
+    .filter((n) => degree.has(n.id))
+    .sort((x, y) => (degree.get(y.id)! - degree.get(x.id)!) || (y.mention_count - x.mention_count))
+    .slice(0, 60)
+    .map((n) => ({ id: n.id, name: n.name, type: n.type, weight: n.mention_count }));
 
   const ids = new Set(nodes.map((n) => n.id));
-  const edges = (
-    db
-      .prepare(
-        `SELECT src_id, dst_id, weight FROM edges
-         WHERE relation = 'co_mention' AND weight >= 1
-           AND last_seen >= datetime('now', '-30 day') LIMIT 200`
-      )
-      .all() as unknown as { src_id: number; dst_id: number; weight: number }[]
-  ).filter((e) => ids.has(e.src_id) && ids.has(e.dst_id));
+  const edges = pairRows
+    .filter((r) => ids.has(r.a) && ids.has(r.b))
+    .map((r) => ({ src_id: r.a, dst_id: r.b, weight: r.w }))
+    .slice(0, 300);
 
   return NextResponse.json({ mode: "entities", nodes, edges });
 }
