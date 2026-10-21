@@ -24,20 +24,27 @@ const KINDS = [
 export default async function WatchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ kind?: string }>;
+  searchParams: Promise<{ kind?: string; range?: string; q?: string }>;
 }) {
-  const { kind } = await searchParams;
+  const { kind, range, q } = await searchParams;
+  const rangeDays = range === "1" ? 1 : range === "7" ? 7 : range === "all" ? 3650 : 30;
+  const qq = (q ?? "").trim();
   const active = KINDS.find((k) => k.key === kind) ?? KINDS[0];
   const db = getDb();
 
+  const where =
+    "s.name = '巨潮·公告' AND i.content LIKE ? AND date(COALESCE(i.published_at, i.fetched_at)) >= date('now', ?)" +
+    (qq ? " AND i.title LIKE ?" : "");
+  const params: (string | number)[] = [`%[${active.cn}]%`, `-${rangeDays} day`];
+  if (qq) params.push(`%${qq}%`);
   const rows = db
     .prepare(
       `SELECT i.id, i.title, i.link, i.content, i.published_at, i.tier
        FROM items i JOIN sources s ON s.id = i.source_id
-       WHERE s.name = '巨潮·公告' AND i.content LIKE ?
+       WHERE ${where}
        ORDER BY i.published_at DESC, i.id DESC LIMIT 80`
     )
-    .all(`%[${active.cn}]%`) as unknown as ItemRow[];
+    .all(...params) as unknown as ItemRow[];
 
   const counts = KINDS.map((k) => ({
     ...k,
@@ -73,7 +80,36 @@ export default async function WatchPage({
               <span className="mono ml-1 text-[11px] text-zinc-400 tabular-nums">{k.n}</span>
             </a>
           ))}
-          <span className="ml-auto text-[12px] text-zinc-400">{active.desc}</span>
+          <span className="ml-auto text-[12px] text-zinc-400 hidden lg:inline">{active.desc}</span>
+        </div>
+
+        {/* 时间范围 + 关键词筛选 */}
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          {[
+            { v: "1", l: "今天" },
+            { v: "7", l: "7 天" },
+            { v: "30", l: "30 天" },
+            { v: "all", l: "全部" },
+          ].map((r) => {
+            const qs = new URLSearchParams({ kind: active.key, range: r.v, ...(qq ? { q: qq } : {}) });
+            const on = String(rangeDays) === (r.v === "all" ? "3650" : r.v);
+            return (
+              <a key={r.v} href={`/watch?${qs}`} className={`pill magnetic ${on ? "pill-active" : ""}`}>
+                {r.l}
+              </a>
+            );
+          })}
+          <form action="/watch" method="get" className="ml-auto flex items-center gap-2">
+            <input type="hidden" name="kind" value={active.key} />
+            <input type="hidden" name="range" value={range ?? "30"} />
+            <input
+              name="q"
+              defaultValue={qq}
+              placeholder="搜索公司 / 关键词"
+              className="w-[180px] rounded-full border border-zinc-200 bg-white px-3.5 py-1.5 text-[12.5px] outline-none focus:border-[#00b8d4]"
+            />
+            <button className="pill magnetic">搜索</button>
+          </form>
         </div>
 
         {rows.length === 0 ? (

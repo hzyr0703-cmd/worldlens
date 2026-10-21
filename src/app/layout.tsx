@@ -19,24 +19,21 @@ const NAV_GROUPS = [
     group: "今日",
     items: [
       { href: "/", label: "首页" },
-      { href: "/feed", label: "快讯" },
+      { href: "/watch", label: "监控" },
     ],
   },
   {
-    group: "加工",
+    group: "知识",
     items: [
-      { href: "/inbox", label: "文章池" },
-      { href: "/review", label: "复习" },
-      { href: "/library", label: "认知库" },
-    ],
-  },
-  {
-    group: "回查",
-    items: [
-      { href: "/watch", label: "监控" },
-      { href: "/watch", label: "监控" },
       { href: "/chains", label: "链条" },
+      { href: "/library", label: "认知库" },
       { href: "/graph", label: "图谱" },
+    ],
+  },
+  {
+    group: "我",
+    items: [
+      { href: "/review", label: "复习" },
       { href: "/log", label: "日志" },
     ],
   },

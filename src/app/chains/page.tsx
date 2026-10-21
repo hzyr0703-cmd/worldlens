@@ -41,9 +41,10 @@ const STATUS_META: Record<string, { cn: string; cls: string }> = {
 export default async function ChainsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ id?: string }>;
+  searchParams: Promise<{ id?: string; status?: string }>;
 }) {
-  const { id } = await searchParams;
+  const { id, status } = await searchParams;
+  const statusFilter = ["active", "broken", "resolved"].includes(status ?? "") ? status! : "";
   const db = getDb();
 
   const chains = db
@@ -51,10 +52,18 @@ export default async function ChainsPage({
       `SELECT c.id, c.title, c.thesis, c.status, c.domain, c.confidence, c.updated_at,
               (SELECT COUNT(*) FROM chain_steps s WHERE s.chain_id = c.id) AS stepCount,
               (SELECT s.claim FROM chain_steps s WHERE s.chain_id = c.id ORDER BY s.seq DESC LIMIT 1) AS lastStep
-       FROM chains c WHERE c.status != 'archived'
+       FROM chains c WHERE c.status != 'archived' ${statusFilter ? "AND c.status = ?" : ""}
        ORDER BY (c.status = 'broken') DESC, c.updated_at DESC LIMIT 40`
     )
-    .all() as unknown as Chain[];
+    .all(...(statusFilter ? [statusFilter] : [])) as unknown as Chain[];
+
+  const statusCounts = db
+    .prepare(
+      `SELECT status, COUNT(*) c FROM chains WHERE status != 'archived' GROUP BY status`
+    )
+    .all() as unknown as { status: string; c: number }[];
+  const countOf = (s: string) => statusCounts.find((x) => x.status === s)?.c ?? 0;
+  const totalChains = statusCounts.reduce((s, x) => s + x.c, 0);
 
   const detailId = Number(id ?? "0");
   const detail = chains.find((c) => c.id === detailId);
@@ -71,6 +80,50 @@ export default async function ChainsPage({
         desc="信息是点，知识是链。每一环都挂到真实新闻上——可以顺着链条重新理解一件事是怎么走到今天的。"
         aside={<span className="pill">{chains.length} 条链</span>}
       />
+
+        {/* 状态筛选 */}
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          {[
+            { v: "", l: "全部", n: totalChains },
+            { v: "active", l: "演进中", n: countOf("active") },
+            { v: "broken", l: "已断裂", n: countOf("broken") },
+            { v: "resolved", l: "已验证", n: countOf("resolved") },
+          ].map((f) => {
+            const qs = new URLSearchParams({ ...(f.v ? { status: f.v } : {}), ...(id ? { id } : {}) });
+            const on = statusFilter === f.v;
+            return (
+              <a key={f.l} href={`/chains?${qs}`} className={`pill magnetic ${on ? "pill-active" : ""}`}>
+                {f.l}
+                <span className="mono ml-1 text-[11px] text-zinc-400 tabular-nums">{f.n}</span>
+              </a>
+            );
+          })}
+          <span className="ml-auto text-[12px] text-zinc-400">
+            每条链的每一环都能点开看原始新闻
+          </span>
+        </div>
+
+        {/* 状态筛选 */}
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          {[
+            { v: "", l: "全部", n: totalChains },
+            { v: "active", l: "演进中", n: countOf("active") },
+            { v: "broken", l: "已断裂", n: countOf("broken") },
+            { v: "resolved", l: "已验证", n: countOf("resolved") },
+          ].map((f) => {
+            const qs = new URLSearchParams({ ...(f.v ? { status: f.v } : {}), ...(id ? { id } : {}) });
+            const on = statusFilter === f.v;
+            return (
+              <a key={f.l} href={`/chains?${qs}`} className={`pill magnetic ${on ? "pill-active" : ""}`}>
+                {f.l}
+                <span className="mono ml-1 text-[11px] text-zinc-400 tabular-nums">{f.n}</span>
+              </a>
+            );
+          })}
+          <span className="ml-auto text-[12px] text-zinc-400">
+            每条链的每一环都能点开看原始新闻
+          </span>
+        </div>
 
       <div className="page-body">
         {chains.length === 0 ? (
