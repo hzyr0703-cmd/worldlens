@@ -92,6 +92,9 @@ export const SEED_ENTITIES: { name: string; type: string; aliases: string[] }[] 
   { name: "AI算力", type: "concept", aliases: ["算力", "GPU", "英伟达", "NVIDIA", "AI芯片"] },
   // 英文实体（WSJ/arXiv 等海外源）
   { name: "美联储", type: "macro", aliases: ["Federal Reserve", "interest rate", "rate cut", "rate hike", "FOMC"] },
+  { name: "AI", type: "concept", aliases: ["人工智能", "AIGC", "生成式AI", "大模型"] },
+  { name: "台积电", type: "company", aliases: ["TSMC", "台积电股份"] },
+  { name: "比特币", type: "concept", aliases: ["BTC", "BTC/USD"] },
   { name: "英伟达", type: "company", aliases: ["NVIDIA", "NVDA"] },
   { name: "苹果", type: "company", aliases: ["Apple", "AAPL"] },
   { name: "微软", type: "company", aliases: ["Microsoft", "MSFT"] },

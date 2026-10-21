@@ -1,0 +1,214 @@
+import { getDb } from "@/lib/db";
+import PageHead from "@/components/PageHead";
+
+export const dynamic = "force-dynamic";
+
+type RunRow = { run_date: string; ok: number; detail: string; ms: number; created_at: string };
+type SourceRow = { name: string; tier: number; enabled: number; last_fetch: string | null; item_count: number };
+
+const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
+
+/** 系统健康 —— 采集 / 蒸馏 / 链条 / 简报 / LLM 的实时运转状态 */
+export default async function StatusPage() {
+  const db = getDb();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const runs = db
+    .prepare(`SELECT run_date, ok, detail, ms, created_at FROM cron_log ORDER BY id DESC LIMIT 10`)
+    .all() as unknown as RunRow[];
+
+  const sources = db
+    .prepare(
+      `SELECT s.name, s.tier, s.enabled,
+              (SELECT MAX(fetched_at) FROM items i WHERE i.source_id = s.id) AS last_fetch,
+              (SELECT COUNT(*) FROM items i WHERE i.source_id = s.id) AS item_count
+       FROM sources s ORDER BY s.tier, s.name`
+    )
+    .all() as unknown as SourceRow[];
+
+  const counts = db
+    .prepare(
+      `SELECT
+        (SELECT COUNT(*) FROM items) AS items,
+        (SELECT COUNT(*) FROM items WHERE date(COALESCE(published_at, fetched_at)) = date('now')) AS items_today,
+        (SELECT COUNT(*) FROM items WHERE distilled = 0) AS backlog,
+        (SELECT COUNT(*) FROM claims) AS claims,
+        (SELECT COUNT(*) FROM nuggets WHERE status != 'retired') AS atoms,
+        (SELECT COUNT(*) FROM nugget_links) AS links,
+        (SELECT COUNT(*) FROM chains) AS chains,
+        (SELECT COUNT(*) FROM chain_steps) AS steps,
+        (SELECT COUNT(*) FROM entities) AS entities,
+        (SELECT COUNT(*) FROM articles) AS articles,
+        (SELECT COUNT(*) FROM review_cards WHERE due <= datetime('now')) AS due,
+        (SELECT COUNT(*) FROM digests) AS briefs,
+        (SELECT MAX(date) FROM digests) AS last_brief`
+    )
+    .get() as unknown as Record<string, number | string>;
+
+  const llm = db
+    .prepare(
+      `SELECT purpose, model, COUNT(*) n, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) fails, ROUND(AVG(ms)) avg_ms
+       FROM llm_log WHERE date(created_at) = date('now') GROUP BY purpose, model ORDER BY n DESC LIMIT 8`
+    )
+    .all() as unknown as { purpose: string; model: string; n: number; fails: number; avg_ms: number }[];
+
+  const llmTotal = llm.reduce((s, x) => s + num(x.n), 0);
+  const llmFails = llm.reduce((s, x) => s + num(x.fails), 0);
+
+  // 最近 7 天 cron 是否都成功
+  const last7 = db
+    .prepare(
+      `SELECT date('now', '-' || d || ' day') AS day FROM (SELECT 0 d UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6)`
+    )
+    .all() as unknown as { day: string }[];
+  const runDays = new Set(runs.filter((r) => r.ok === 1).map((r) => r.run_date));
+  const coverage = last7.map((d) => ({ day: d.day, ok: runDays.has(d.day) }));
+
+  const health = [
+    {
+      label: "采集",
+      value: `${num(counts.items_today)} 条今日`,
+      note: `共 ${num(counts.items)} 条 · 每 20 分钟一轮`,
+      ok: num(counts.items_today) > 0,
+    },
+    {
+      label: "蒸馏",
+      value: `积压 ${num(counts.backlog)}`,
+      note: `原子 ${num(counts.atoms)} · 连边 ${num(counts.links)}`,
+      ok: num(counts.backlog) < 1500,
+    },
+    {
+      label: "链条",
+      value: `${num(counts.chains)} 条`,
+      note: `${num(counts.steps)} 环 · 每日 08:00 + 简报刷新后建链`,
+      ok: num(counts.chains) > 0,
+    },
+    {
+      label: "简报",
+      value: counts.last_brief === today ? "今日已生成" : `最新 ${counts.last_brief}`,
+      note: `共 ${num(counts.briefs)} 期 · 每小时检查重算`,
+      ok: String(counts.last_brief) === today,
+    },
+    {
+      label: "LLM",
+      value: `${llmTotal} 次调用`,
+      note: `失败 ${llmFails} 次 · 今日`,
+      ok: llmTotal === 0 || llmFails / llmTotal < 0.1,
+    },
+    {
+      label: "自动运行",
+      value: `${coverage.filter((c) => c.ok).length}/7 天`,
+      note: "每日全链路 cron 成功记录",
+      ok: coverage.filter((c) => c.ok).length >= 5,
+    },
+  ];
+
+  return (
+    <div>
+      <PageHead
+        index="13"
+        kicker="System health"
+        title="系统运转"
+        desc="引擎是否还活着：采集、蒸馏、链条、简报、模型调用的实时状态。"
+      />
+
+      <div className="page-body">
+        <div className="stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {health.map((h) => (
+            <div key={h.label} className="panel p-5">
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${h.ok ? "bg-[#2E9E5B]" : "bg-[#d92b3c]"}`} />
+                <span className="text-[12px] font-semibold tracking-wide text-zinc-500">{h.label}</span>
+              </div>
+              <div className="mt-2 text-[19px] font-semibold tracking-[-0.02em] tabular-nums">{h.value}</div>
+              <div className="mt-1 text-[12px] text-zinc-400">{h.note}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="panel p-6">
+            <div className="sec-index mono mb-3">最近 10 次自动运行</div>
+            {runs.length === 0 ? (
+              <p className="text-[13px] text-zinc-500">暂无记录</p>
+            ) : (
+              <div className="space-y-2">
+                {runs.map((r, i) => (
+                  <div key={i} className="flex items-center gap-3 text-[12.5px]">
+                    <span className={`tag ${r.ok ? "tier-2" : "tier-0"} shrink-0`}>{r.ok ? "成功" : "失败"}</span>
+                    <span className="mono text-zinc-400 shrink-0">{r.run_date}</span>
+                    <span className="text-zinc-600 flex-1 truncate">{r.detail}</span>
+                    <span className="mono text-zinc-400 shrink-0 tabular-nums">{Math.round(num(r.ms) / 1000)}s</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-4 pt-3 border-t border-zinc-100">
+              <span className="text-[11.5px] text-zinc-400">近 7 天覆盖：</span>
+              {coverage.map((c) => (
+                <span
+                  key={c.day}
+                  title={c.day}
+                  className={`ml-1 inline-block h-2.5 w-2.5 rounded-sm ${c.ok ? "bg-[#2E9E5B]" : "bg-zinc-200"}`}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="panel p-6">
+            <div className="sec-index mono mb-3">今日模型调用</div>
+            {llm.length === 0 ? (
+              <p className="text-[13px] text-zinc-500">今日暂无调用</p>
+            ) : (
+              <div className="space-y-1.5">
+                {llm.map((x, i) => (
+                  <div key={i} className="flex items-center gap-2 text-[12px]">
+                    <span className="mono text-zinc-600 w-[100px] truncate">{x.purpose}</span>
+                    <span className="mono text-zinc-400 w-[90px] truncate">{x.model}</span>
+                    <span className="mono text-zinc-500 tabular-nums w-10 text-right">{x.n}</span>
+                    <span className={`mono tabular-nums w-10 text-right ${num(x.fails) > 0 ? "text-[#d92b3c]" : "text-zinc-300"}`}>
+                      {num(x.fails)}
+                    </span>
+                    <span className="mono text-zinc-300 tabular-nums ml-auto">{num(x.avg_ms)}ms</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-3 pt-3 border-t border-zinc-100 text-[11.5px] text-zinc-400">
+              列依次为：用途 · 模型 · 次数 · 失败 · 平均耗时
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-10">
+          <div className="sec-index mono mb-3">信源状态</div>
+          <div className="panel overflow-hidden">
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="border-b border-zinc-100 text-left text-[11px] text-zinc-400">
+                  <th className="px-4 py-2 font-normal">信源</th>
+                  <th className="px-4 py-2 font-normal">等级</th>
+                  <th className="px-4 py-2 font-normal text-right">累计</th>
+                  <th className="px-4 py-2 font-normal text-right">最近采集</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sources.map((s) => (
+                  <tr key={s.name} className="border-b border-zinc-50 last:border-0">
+                    <td className="px-4 py-2 text-zinc-700">
+                      {s.name}
+                      {s.enabled === 0 && <span className="ml-2 text-[10.5px] text-zinc-400">停用</span>}
+                    </td>
+                    <td className="px-4 py-2 mono text-zinc-400">T{s.tier}</td>
+                    <td className="px-4 py-2 mono text-right tabular-nums text-zinc-600">{num(s.item_count)}</td>
+                    <td className="px-4 py-2 mono text-right text-zinc-400">{(s.last_fetch ?? "—").slice(5, 16)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

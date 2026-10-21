@@ -36,6 +36,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/review", label: "复习" },
       { href: "/log", label: "日志" },
+      { href: "/status", label: "运转" },
     ],
   },
 ];
