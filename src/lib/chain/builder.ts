@@ -86,11 +86,27 @@ export async function buildChains(date?: string): Promise<ChainResult> {
     ? chains.map((c) => `[chain:${c.id}] ${c.title}｜判断:${c.thesis}｜最近环节:${c.steps ?? "无"}`).join("\n")
     : "（暂无已有链条）";
 
+  // 验证点已过期的活跃链：提示引擎重新给未来验证点（否则链条验证体系空转）
+  const stale = db
+    .prepare(
+      `SELECT DISTINCT c.id, c.title FROM chains c JOIN chain_steps s ON s.chain_id = c.id
+       WHERE c.status = 'active' AND s.role = 'verify' AND s.verify_by != '' AND s.verify_by < date('now')
+       LIMIT 5`
+    )
+    .all() as unknown as { id: number; title: string }[];
+  const staleText = stale.length
+    ? stale.map((s) => `[chain:${s.id}] ${s.title}`).join("；")
+    : "";
+
   const prompt = `【A. 今日信息】
 ${itemsText.slice(0, 7000)}
 
 【B. 已有活跃链条】
 ${chainsText.slice(0, 3000)}
+${staleText ? `
+【B2. 验证点已过期的链条（请在 extends 中为它们追加一个 role=verify 的未来验证点）】
+${staleText}` : ""}
+${staleText ? `\n【B2. 验证点已过期的链条（请在 extends 中为它们追加一个 role=verify 的未来验证点）】\n${staleText}` : ""}
 
 任务：把这些信息炼成知识链的环节。三条路径：
 1. **extends**：某条信息是已有链的自然下一环（时序推进或因果推进）→ 追加环节

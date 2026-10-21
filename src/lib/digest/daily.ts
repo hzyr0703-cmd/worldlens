@@ -83,6 +83,27 @@ export async function buildDigest(date?: string): Promise<{ date: string; conten
     )
     .get(d, d) as unknown as { items: number; claims: number };
 
+  // D 层：当日巨潮公告（T0 最硬证据）
+  const announcements = db
+    .prepare(
+      `SELECT i.title, i.content FROM items i JOIN sources s ON s.id = i.source_id
+       WHERE s.name = '巨潮·公告' AND date(COALESCE(i.published_at, i.fetched_at)) = ?
+       ORDER BY i.id DESC LIMIT 12`
+    )
+    .all(d) as unknown as { title: string; content: string }[];
+
+  // E 层：已注册的链条验证点（未过期的）
+  const verifyPoints = db
+    .prepare(
+      `SELECT c.title, s.claim, s.verify_by FROM chain_steps s
+       JOIN chains c ON c.id = s.chain_id
+       WHERE s.role = 'verify' AND s.verify_by >= date('now') AND c.status = 'active'
+       ORDER BY c.updated_at DESC LIMIT 6`
+    )
+    .all() as unknown as { title: string; claim: string; verify_by: string }[];
+
+
+
   let content: string;
 
   if (topics.length === 0) {
@@ -111,6 +132,7 @@ C. 用户的认知原子库（用户长期保存、亲手沉淀的理解）
 输出 markdown 简报，五节结构（总长 1400-2000 字，五节必须全部输出，最后一节不许省略）：
 ## 今日主线
 3-5 条。每条格式：**一句话结论**（带信源标签），后接 2-3 句展开（机制、数字、影响路径）。只陈述，不抒情。
+**若 D 中有 T0 公告，至少让 1 条今日主线来自公告**——交易所公告是最硬的证据，优先级高于媒体转述。
 ## 与历史的对话
 今日信息和 B 层历史主张的对照：印证了什么？推翻/修正了什么？同一件事的说法在如何演变？每条对照写清"历史说了 X → 今天出现 Y → 说明 Z"。若 B 层为空或确无对照，就诚实写"今日信息为新增视角，暂无历史对照"——绝不编造对照关系。
 ## 与你的认知库的对话
@@ -133,10 +155,10 @@ C. 用户的认知原子库（用户长期保存、亲手沉淀的理解）
 纪律（极重要）：不做无依据的指控；不点名推测个人动机；不涉及政治敏感与未公开信息；证据等级必须诚实标注，推断就是推断；如果今日信息里没有值得深挖的结构，就写"今日无明显值得下潜的信息"——宁可空着，不编造阴谋。
 
 ## 值得追踪
-2-3 个待验证的信号（具体、可证伪）。
+**优先采用 E 中已注册的验证点**（若 E 非空，直接列出 2-3 条并标注对应链条名，不要另造新信号）；E 为空时再自行给出 2-3 个可证伪信号。
 
 纪律：只输出 markdown，不要客套；「对话」两节是简报的灵魂，「水面之下」是简报的锋利处——宁可少而真，不可多而凑；但真实的对照要写透（机制+影响），不要一句话带过。`,
-      `【A. 今日快讯】\n${corpus.slice(0, 9000)}\n\n【B. 同实体历史主张（近30天）】\n${histBlock.slice(0, 3500)}\n\n【C. 用户认知原子库】\n${atomBlock.slice(0, 3500)}`,
+      `【A. 今日快讯】\n${corpus.slice(0, 9000)}\n\n【B. 同实体历史主张（近30天）】\n${histBlock.slice(0, 3500)}\n\n【C. 用户认知原子库】\n${atomBlock.slice(0, 2500)}\n\n【D. 今日 T0 公告（交易所公告库，最硬证据）】\n${announcements.length ? announcements.map((a) => `- ${a.content.slice(0, 18)} ${a.title}`).join("\n") : "（今日无公告）"}\n\n【E. 已注册的验证点（来自知识链条，务必沿用）】\n${verifyPoints.length ? verifyPoints.map((v) => `- [${v.verify_by} 到期] ${v.title}：${v.claim.slice(0, 80)}`).join("\n") : "（暂无）"}`,
       {
         maxTokens: 6500,
         temperature: 0.35,
