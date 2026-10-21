@@ -33,6 +33,7 @@ function initSchema(db: DatabaseSync) {
   // v4: nuggets 加"你的参与"字段（幂等迁移，列已存在时忽略报错）
   for (const ddl of [
     `ALTER TABLE nuggets ADD COLUMN origin TEXT NOT NULL DEFAULT 'auto'`,
+    `ALTER TABLE chain_steps ADD COLUMN nugget_id INTEGER`,
     `ALTER TABLE nuggets ADD COLUMN user_answer TEXT DEFAULT ''`,
     `ALTER TABLE nuggets ADD COLUMN ai_correction TEXT DEFAULT ''`,
     `ALTER TABLE articles ADD COLUMN refined TEXT DEFAULT ''`,

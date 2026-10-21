@@ -113,7 +113,9 @@ ${chainsText.slice(0, 3000)}
 3. 反例（禁止）：把「财长周三会见基金经理」写成 mechanism——这是日程进展，不是传导机制。
    正例：mechanism =「基金被限制在 TEFAS 交易 → 资金转寻场外通道 → 监管进一步收紧处罚」。
 4. 若一条信息只能串出"事件进展"（A 出事、然后 B 出事、然后 C 开会），**不要建链**——那不是知识链，是新闻时间线。
-5. 没料就不输出对应字段（空数组）。`;
+5. 没料就不输出对应字段（空数组）。
+6. **每条新链尽量给一个 verify 环节**：从链条推演里提炼一个未来能验证的推论（如"若机制成立，X 指标将在 Y 时间内变化"），给具体日期。这是链条的自我验证，缺了它链条就只是叙事。
+6. **每条新链尽量给一个 verify 环节**：从链条推演里提炼一个未来能验证的推论（如"若机制成立，X 指标将在 Y 时间内变化"），给具体日期。这是链条的自我验证，缺了它链条就只是叙事。`;
 
   let parsed: Record<string, unknown> | null = null;
   try {
@@ -193,9 +195,36 @@ ${chainsText.slice(0, 3000)}
         ["finance", "ai", "tech"].includes(String(ch.domain)) ? String(ch.domain) : "finance"
       ) as unknown as { lastInsertRowid: number | bigint };
     const cid = Number(info.lastInsertRowid);
+    const verifyNuggets: { nid: number; statement: string }[] = [];
     cleanSteps.forEach((st, i) => {
-      insStep.run(cid, i + 1, st.role, st.claim.slice(0, 300), JSON.stringify(st.ids), st.verifyBy.slice(0, 10));
+      const info = insStep.run(cid, i + 1, st.role, st.claim.slice(0, 300), JSON.stringify(st.ids), st.verifyBy.slice(0, 10)) as unknown as {
+        lastInsertRowid: number | bigint;
+      };
+      // verify 环节 → 落成 judgment 原子，进入对账体系（链条的验证就是它的对账）
+      if (st.role === "verify" && st.verifyBy) {
+        const ninfo = db
+          .prepare(
+            `INSERT INTO nuggets (type, statement, elaboration, domain, confidence, source_items, distill_date, origin)
+             VALUES ('judgment', ?, ?, 'finance', 0.6, ?, date('now'), 'chain')`
+          )
+          .run(
+            st.claim.slice(0, 500),
+            `来自知识链条 #${cid} 的待验证推演`,
+            JSON.stringify(st.ids)
+          ) as unknown as { lastInsertRowid: number | bigint };
+        const nid = Number(ninfo.lastInsertRowid);
+        db.prepare(`UPDATE chain_steps SET nugget_id = ? WHERE id = ?`).run(nid, Number(info.lastInsertRowid));
+        verifyNuggets.push({ nid, statement: st.claim });
+      }
     });
+    if (verifyNuggets.length > 0) {
+      try {
+        const { ensureVerifications } = await import("@/lib/verify/ledger");
+        await ensureVerifications(verifyNuggets);
+      } catch {
+        /* 对账生成失败不影响链条 */
+      }
+    }
     result.created++;
   }
 

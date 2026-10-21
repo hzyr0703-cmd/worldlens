@@ -191,4 +191,23 @@ export function settleVerification(
   }
 
   db.prepare(`DELETE FROM review_cards WHERE id = ?`).run(cardId);
+
+  // 链条闭环：该原子若是链条的 verify 环节，结算结果回写链条状态
+  const step = db
+    .prepare(`SELECT id, chain_id FROM chain_steps WHERE nugget_id = ? LIMIT 1`)
+    .get(nid) as unknown as { id: number; chain_id: number } | undefined;
+  if (step) {
+    db.prepare(`UPDATE chain_steps SET verified = ? WHERE id = ?`).run(outcome === "confirmed" ? 1 : -1, step.id);
+    const agg = db
+      .prepare(
+        `SELECT SUM(verified = 1) ok, SUM(verified = -1) bad, COUNT(*) total
+         FROM chain_steps WHERE chain_id = ? AND verified != 0`
+      )
+      .get(step.chain_id) as unknown as { ok: number | null; bad: number | null; total: number };
+    if ((agg.bad ?? 0) > 0) {
+      db.prepare(`UPDATE chains SET status = 'broken', updated_at = datetime('now') WHERE id = ?`).run(step.chain_id);
+    } else if ((agg.ok ?? 0) > 0 && agg.ok === agg.total) {
+      db.prepare(`UPDATE chains SET status = 'resolved', updated_at = datetime('now') WHERE id = ?`).run(step.chain_id);
+    }
+  }
 }
