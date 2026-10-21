@@ -46,6 +46,16 @@ export default async function WatchPage({
     )
     .all(...params) as unknown as ItemRow[];
 
+  // 公告标题形如 "江丰电子(300666)：..."，抽出公司名映射到实体（用于跳档案）
+  const entityMap = new Map<string, { id: number; name: string }>();
+  for (const row of db.prepare(`SELECT id, name FROM entities WHERE type = 'company'`).all() as unknown as { id: number; name: string }[]) {
+    entityMap.set(row.name, row);
+  }
+  const entityOf = (title: string) => {
+    const m = title.match(/^([^(（]+)[(（]/);
+    return m ? entityMap.get(m[1].trim()) ?? null : null;
+  };
+
   const counts = KINDS.map((k) => ({
     ...k,
     n: (
@@ -134,6 +144,22 @@ export default async function WatchPage({
                     >
                       {it.title}
                     </a>
+                    {entityOf(it.title) && (
+                      <a
+                        href={`/entity/${entityOf(it.title)!.id}`}
+                        className="ml-2 inline-block rounded-full border border-zinc-200 px-2 py-0.5 text-[10.5px] text-zinc-500 hover:border-[#00b8d4] hover:text-[#007a8c] align-middle"
+                      >
+                        {entityOf(it.title)!.name} 档案 →
+                      </a>
+                    )}
+                    {entityOf(it.title) && (
+                      <a
+                        href={`/entity/${entityOf(it.title)!.id}`}
+                        className="ml-2 inline-block rounded-full border border-zinc-200 px-2 py-0.5 text-[10.5px] text-zinc-500 hover:border-[#00b8d4] hover:text-[#007a8c] align-middle"
+                      >
+                        {entityOf(it.title)!.name} 档案 →
+                      </a>
+                    )}
                     <div className="mono mt-1 text-[11px] text-zinc-400 tabular-nums">
                       {(it.published_at ?? "").slice(0, 16)} · 巨潮 PDF
                     </div>

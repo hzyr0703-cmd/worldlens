@@ -523,11 +523,21 @@ export default function GraphCanvas() {
 
           {/* 实体悬停卡 */}
           {mode === "entities" && hoverEntity && (
-            <div className="panel absolute top-3 right-3 max-w-[260px] px-4 py-2.5 text-[12.5px]">
-              <span className="font-semibold">{hoverEntity.name}</span>
-              <span className="ml-2 text-zinc-500">
-                {ENTITY_CN[hoverEntity.type] ?? hoverEntity.type} · 提及 {hoverEntity.weight} 次
-              </span>
+            <div className="panel absolute top-3 right-3 max-w-[280px] px-4 py-2.5 text-[12.5px]">
+              <div>
+                <span className="font-semibold">{hoverEntity.name}</span>
+                <span className="ml-2 text-zinc-500">
+                  {ENTITY_CN[hoverEntity.type] ?? hoverEntity.type} · 提及 {hoverEntity.weight} 次
+                </span>
+              </div>
+              <a
+                href={`/entity/${hoverEntity.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-block text-[11.5px] text-[#007a8c] hover:underline"
+              >
+                查看完整档案（信息 · 公告 · 链条 · 原子）→
+              </a>
             </div>
           )}
 

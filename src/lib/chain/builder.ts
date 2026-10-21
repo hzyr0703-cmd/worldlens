@@ -54,18 +54,31 @@ export async function buildChains(date?: string): Promise<ChainResult> {
   const result: ChainResult = { extended: 0, created: 0, broken: 0 };
   if (!llmEnabled) return result;
 
-  // A. 当日信息（限 60 条，带实体与多空倾向）
+  // A. 当日信息 —— 按实体聚合（覆盖 300+ 实体，而不是只看最新 60 条）
+  // 每个实体一行：实体名 + 该实体今日的信息标题（最多 3 条）
+  const entityRows = db
+    .prepare(
+      `SELECT e.id AS entity_id, e.name, e.type,
+              COUNT(*) AS cnt,
+              GROUP_CONCAT(i.title, '｜') AS titles
+       FROM claims c
+       JOIN items i ON i.id = c.item_id
+       JOIN entities e ON e.id = c.entity_id
+       WHERE date(COALESCE(i.published_at, i.fetched_at)) = ?
+       GROUP BY e.id
+       ORDER BY cnt DESC LIMIT 120`
+    )
+    .all(d) as unknown as { entity_id: number; name: string; type: string; cnt: number; titles: string }[];
+
+  // 同时保留原始 item（用于追溯 item_ids）
   const items = db
     .prepare(
       `SELECT i.id, i.title,
-              (SELECT GROUP_CONCAT(e.name, '、') FROM claims c JOIN entities e ON e.id = c.entity_id
-               WHERE c.item_id = i.id LIMIT 1) AS entities,
               (SELECT c.polarity FROM claims c WHERE c.item_id = i.id LIMIT 1) AS polarity
-       FROM items i
-       WHERE date(COALESCE(i.published_at, i.fetched_at)) = ?
-       ORDER BY i.id DESC LIMIT 60`
+       FROM items i WHERE date(COALESCE(i.published_at, i.fetched_at)) = ?
+       ORDER BY i.id DESC LIMIT 300`
     )
-    .all(d) as unknown as DayItem[];
+    .all(d) as unknown as { id: number; title: string; polarity: string | null }[];
   if (items.length < 2) return result;
 
   // B. 已有活跃链条（最近 15 条，含最近 3 个环节）
@@ -79,9 +92,17 @@ export async function buildChains(date?: string): Promise<ChainResult> {
     )
     .all() as unknown as ChainRow[];
 
-  const itemsText = items
-    .map((i) => `[id:${i.id}]${i.polarity === "bullish" ? "▲" : i.polarity === "bearish" ? "▼" : ""} ${i.title}｜实体:${i.entities ?? "—"}`)
-    .join("\n");
+  // 实体聚合视图（覆盖优先）+ item id 索引（追溯用，只给 id 与标题）
+  const itemsText =
+    "【按实体聚合（每个实体今日的全部信息，优先从这些实体出发建链）】\n" +
+    entityRows
+      .map((e) => `[${e.name}·${e.type}](${e.cnt}条) ${e.titles.split("｜").slice(0, 3).join("；")}`)
+      .join("\n") +
+    "\n\n【全部今日信息（可用 item id 追溯，格式：[id:N] 标题）】\n" +
+    items
+      .slice(0, 150)
+      .map((i) => `[id:${i.id}]${i.polarity === "bullish" ? "▲" : i.polarity === "bearish" ? "▼" : ""} ${i.title.slice(0, 50)}`)
+      .join("\n");
   const chainsText = chains.length
     ? chains.map((c) => `[chain:${c.id}] ${c.title}｜判断:${c.thesis}｜最近环节:${c.steps ?? "无"}`).join("\n")
     : "（暂无已有链条）";
@@ -99,7 +120,7 @@ export async function buildChains(date?: string): Promise<ChainResult> {
     : "";
 
   const prompt = `【A. 今日信息】
-${itemsText.slice(0, 7000)}
+${itemsText.slice(0, 11000)}
 
 【B. 已有活跃链条】
 ${chainsText.slice(0, 3000)}
