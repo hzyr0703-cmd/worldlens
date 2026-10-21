@@ -19,12 +19,52 @@ const TYPE_CN: Record<string, string> = {
   counterexample: "反例", judgment: "判断", question: "开放问题", norm: "潜规则",
 };
 
+
+/** 机制质量过滤：
+ *  1) 循环论证：链条首尾主体相同（A → … → A）
+ *  2) 同义反复：含"推动增长/促进发展/有助于提升"等空泛动词且无具体数字
+ *  3) 过短或缺因果标记（mechanism 必须有箭头或"导致/使得/倒逼"）
+ */
+function isQualityAtom(type: string, statement: string): boolean {
+  const s = statement.trim();
+  if (s.length < 12) return false;
+  if (type !== "mechanism") return true;
+
+  const hasCausal = /→|->|导致|使得|倒逼|进而|从而|引发|催生/.test(s);
+  if (!hasCausal) return false;
+
+  // 循环论证：链条里第一个与最后一个主体相同
+  if (/→/.test(s)) {
+    const parts = s.split("→").map((x) => x.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      const head = parts[0].slice(0, 6);
+      const tail = parts[parts.length - 1].slice(0, 6);
+      if (head && tail && (head.includes(tail) || tail.includes(head))) return false;
+    }
+  }
+
+  // 空泛：有"推动/促进/有助于/提升"但通篇无一个数字
+  const vague = /推动|促进|有助于|有利于|提升|改善/.test(s);
+  const hasNumber = /\d/.test(s);
+  if (vague && !hasNumber) return false;
+
+  return true;
+}
+
+
 const DISTILL_SYSTEM = `你是认知蒸馏引擎。输入是若干条财经/AI 领域的实时信息，你的任务不是摘要新闻，而是提炼"认知原子"——值得长期保存、可跨场景复用的理解单元。
 
 六种原子类型：
-- mechanism 机制：现象背后的因果原理（如：利率平价使降息压弱本币）
+- mechanism 机制：现象背后的因果原理，**必须写出传导链条（A → 通过什么 → 导致 B，至少两步因果）**。
+  反例（禁止）：「扩大有效需求有助于稳定工业增长」——这只是判断，没有机制；
+  「亚马逊在德国投资将推动当地基础设施发展」——这是事实+预期，不是机制；
+  正例：「地方债置换降低城投融资成本 → 银行息差收窄 → 倒逼银行转向零售贷款」；
+  「利率平价下降息 → 套利资金流出 → 本币贬值」。
 - pattern 模式：可跨场景复用的结构（如：产能过剩→价格战→出清→龙头集中）
-- fact 硬事实：有明确出处、带时效的锚点数据（如：某公司占某市场份额X%）
+- fact 硬事实：**只收会成为长期锚点的硬数据**（市占率、产能、政策数字、行业规模，如"某公司占全球市场份额 32%"）。
+  **注意：单纯的事件进展不是原子**——"某公司发布某产品""某会议召开""某项目签约""某公司融资 N 亿""业绩预告"这类只回答"发生了什么"的信息一律不收；
+  判断标准：这条信息跨场景还有用吗？一个月后还成立吗？两个都否 → 不收。
+  只有能回答"为什么会这样"（mechanism/pattern/norm）或"接下来会怎样"（judgment）的才是认知原子。
 - counterexample 反例：某规律失效的案例（最值钱的原子，遇到必收）
 - judgment 判断：带置信度的前瞻预测，未来信息可验证/证伪
 - question 开放问题：当前无法回答、值得后续信息追查的问题
@@ -33,6 +73,10 @@ const DISTILL_SYSTEM = `你是认知蒸馏引擎。输入是若干条财经/AI �
 纪律：
 1. statement 与 elaboration 必须用简体中文输出（即使信息原文是英文）
 2. 宁缺毋滥——只收真正有长期价值的理解，日常波动、重复信息、纯事件报道不收
+2.5 **类型配比（重要）**：每批输出中 fact **最多 1 条**；优先 mechanism / pattern / judgment / norm。
+    若一批里只能抽出一条 fact，宁可少输出也不要凑数——认知库的价值在"解释力"，不在"信息量"。
+2.5 **类型配比（重要）**：每批输出中 fact **最多 1 条**；优先 mechanism / pattern / judgment / norm。
+    若一批里只能抽出一条 fact，宁可少输出也不要凑数——认知库的价值在"解释力"，不在"信息量"。
 2. statement 必须是一句自足的话（脱离原文也能看懂），包含关键数字与主体
 3. elaboration 补充机制解释或上下文，1-3 句
 4. confidence: fact/mechanism/norm 0.7-0.9, judgment 0.4-0.6, question 0.5
@@ -167,11 +211,11 @@ export async function distillDaily(date?: string, limit = 400): Promise<DistillR
 
     let candidates: RawNugget[] = [];
     try {
-      const raw = await chat(DISTILL_SYSTEM, text, { maxTokens: 4096, temperature: 0.2, purpose: "distill" });
+      const raw = await chat(DISTILL_SYSTEM, text, { maxTokens: 4096, temperature: 0.2, purpose: "distill", model: process.env.DISTILL_MODEL || "glm-4.6" });
       candidates = parseJsonArray<RawNugget>(raw).slice(0, 4); // 偏精：单批上限 4
       if (candidates.length === 0) {
         // JSON 失败重试一次（温度+0.2）
-        const raw2 = await chat(DISTILL_SYSTEM, text, { maxTokens: 4096, temperature: 0.4, purpose: "distill_retry" });
+        const raw2 = await chat(DISTILL_SYSTEM, text, { maxTokens: 4096, temperature: 0.4, purpose: "distill_retry", model: process.env.DISTILL_MODEL || "glm-4.6" });
         candidates = parseJsonArray<RawNugget>(raw2).slice(0, 4);
       }
     } catch (e) {
@@ -188,6 +232,12 @@ export async function distillDaily(date?: string, limit = 400): Promise<DistillR
 
     for (const c of candidates) {
       if (!c.statement || !NUGGET_TYPES.includes(c.type as NuggetType)) continue;
+
+      // ---- 低质机制过滤：循环论证 / 同义反复 / 空泛表述 ----
+      if (!isQualityAtom(c.type, c.statement)) continue;
+
+      // ---- 低质机制过滤：循环论证 / 同义反复 / 空泛表述 ----
+      if (!isQualityAtom(c.type, c.statement)) continue;
 
       // ---- 语义去重：与库内 FTS 相似原子做 bigram 重合比对，重复则强化旧原子而非新建 ----
       const dup = await findDuplicate(c.statement);
