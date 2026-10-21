@@ -123,8 +123,7 @@ export async function buildDigest(date?: string, opts?: { deep?: boolean }): Pro
       ? atoms.map((a) => `- #${a.id}（${a.type}）${a.statement}`).join("\n")
       : "（认知库为空）";
 
-    content = await chat(
-      `你是世界理解引擎的主编。你手上有三层材料：
+    const promptText = `你是世界理解引擎的主编。你手上有三层材料：
 A. 今日快讯（带信源分级 T0官方/T1权威/T2行业/T3观点，▲看多 ▼看空）
 B. 同一实体的历史主张（过去 30 天说过什么）
 C. 用户的认知原子库（用户长期保存、亲手沉淀的理解）
@@ -157,16 +156,31 @@ C. 用户的认知原子库（用户长期保存、亲手沉淀的理解）
 ## 值得追踪
 **优先采用 E 中已注册的验证点**（若 E 非空，直接列出 2-3 条并标注对应链条名，不要另造新信号）；E 为空时再自行给出 2-3 个可证伪信号。
 
-纪律：只输出 markdown，不要客套；「对话」两节是简报的灵魂，「水面之下」是简报的锋利处——宁可少而真，不可多而凑；但真实的对照要写透（机制+影响），不要一句话带过。`,
+纪律：只输出 markdown，不要客套；「对话」两节是简报的灵魂，「水面之下」是简报的锋利处——宁可少而真，不可多而凑；但真实的对照要写透（机制+影响），不要一句话带过。`;
+
+    content = await chat(
+      promptText,
       `【A. 今日快讯】\n${corpus.slice(0, 9000)}\n\n【B. 同实体历史主张（近30天）】\n${histBlock.slice(0, 3500)}\n\n【C. 用户认知原子库】\n${atomBlock.slice(0, 2500)}\n\n【D. 今日 T0 公告（交易所公告库，最硬证据）】\n${announcements.length ? announcements.map((a) => `- ${a.content.slice(0, 18)} ${a.title}`).join("\n") : "（今日无公告）"}\n\n【E. 已注册的验证点（来自知识链条，务必沿用）】\n${verifyPoints.length ? verifyPoints.map((v) => `- [${v.verify_by} 到期] ${v.title}：${v.claim.slice(0, 80)}`).join("\n") : "（暂无）"}`,
       {
-        maxTokens: 8000,
+        maxTokens: opts?.deep ? 14000 : 8000,
         temperature: 0.35,
         purpose: "digest_v3",
-        // 分级路由：简报的「水面之下」需要利益推理能力，用强模型；其余环节仍走便宜的 flash
-        model: opts?.deep ? (process.env.DIGEST_DEEP_MODEL || "glm-4.6") : (process.env.DIGEST_MODEL || "glm-4-flash"),
+        // 分级路由：日常用免费 glm-4-flash；深度版优先 glm-4.7-flash（免费推理版）
+        model: opts?.deep ? (process.env.DIGEST_DEEP_MODEL || "glm-4.7-flash") : (process.env.DIGEST_MODEL || "glm-4-flash"),
       }
-    );
+    ).catch(async (e: unknown) => {
+      // 4.7-flash 免费额度限流（1305）时自动降级到 glm-4.6（付费但稳定）
+      if (opts?.deep && e instanceof Error && /1305|429|访问量过大/.test(e.message)) {
+        console.warn("[digest] deep model rate-limited, falling back to glm-4.6");
+        return chat(promptText, "请按 JSON 格式输出。", {
+          maxTokens: 8000,
+          temperature: 0.35,
+          purpose: "digest_deep_fallback",
+          model: process.env.DIGEST_DEEP_FALLBACK || "glm-4.6",
+        });
+      }
+      throw e;
+    });
     content = `# WorldLens 每日简报 · ${d}\n\n${content}`;
   } else {
     // 规则模板兜底
