@@ -134,27 +134,30 @@ export type DistillResult = {
   contradicted: number;
 };
 
-export async function distillDaily(date?: string): Promise<DistillResult> {
+export async function distillDaily(date?: string, limit = 400): Promise<DistillResult> {
   if (!llmEnabled) throw new Error("LLM 未配置（.env 缺 LLM_BASE_URL/LLM_API_KEY）");
   ensureDistilledColumn();
   const db = getDb();
   const d = date ?? new Date().toISOString().slice(0, 10);
   const result: DistillResult = { batches: 0, scanned: 0, skipped: 0, created: 0, links: 0, reinforced: 0, contradicted: 0 };
 
-  // ---- Step 1: 取未蒸馏 items（ASC：积压时旧条目也能轮到），分批喂给蒸馏引擎 ----
+  // ---- Step 1: 取未蒸馏 items ----
+  // 优先级：巨潮公告（T0 最硬证据）> 其它；同类按新到旧（旧闻价值衰减，新信息优先入链）
   const rows = db
     .prepare(
-      `SELECT id, title, content, tier FROM items
-       WHERE date(COALESCE(published_at, fetched_at)) <= ? AND distilled = 0
-       ORDER BY id ASC LIMIT 120`
+      `SELECT i.id, i.title, i.content, i.tier FROM items i
+       LEFT JOIN sources s ON s.id = i.source_id
+       WHERE date(COALESCE(i.published_at, i.fetched_at)) <= ? AND i.distilled = 0
+       ORDER BY CASE WHEN s.name = '巨潮·公告' THEN 0 ELSE 1 END, i.id DESC
+       LIMIT ?`
     )
-    .all(d) as unknown as { id: number; title: string; content: string; tier: number }[];
+    .all(d, limit) as unknown as { id: number; title: string; content: string; tier: number }[];
 
   const BATCH = 25;
   const newIds: number[] = [];
   const newJudgments: { nid: number; statement: string }[] = [];
 
-  for (let i = 0; i < Math.min(rows.length, 120); i += BATCH) {
+  for (let i = 0; i < rows.length; i += BATCH) {
     const chunk = rows.slice(i, i + BATCH);
     const text = chunk
       .map((r) => `[id:${r.id}|T${r.tier}] ${r.title} —— ${r.content.slice(0, 200)}`)

@@ -97,6 +97,26 @@ export async function register() {
         await extractPending(); // 新信息立刻抽实体/主张，冲突雷达与简报才能看见
         console.log(`[wl-live] +${inserted} rss / +${cnAdded} cninfo items ingested & extracted`);
       }
+      // 蒸馏跟随：每 20 分钟消化 40 条积压（每天 ~2880 条），避免采集远快于理解
+      try {
+        const { distillDaily } = await import("@/lib/distill/pipeline");
+        const dr = await distillDaily(undefined, 40);
+        if (dr.created > 0 || dr.scanned > 0) {
+          console.log(`[wl-live] distilled ${dr.scanned} items -> +${dr.created} atoms`);
+        }
+      } catch {
+        /* 蒸馏失败不阻塞采集 */
+      }
+      // 蒸馏跟随：每 20 分钟消化 40 条积压（每天 ~2880 条），避免采集远快于理解
+      try {
+        const { distillDaily } = await import("@/lib/distill/pipeline");
+        const dr = await distillDaily(undefined, 40);
+        if (dr.created > 0 || dr.scanned > 0) {
+          console.log(`[wl-live] distilled ${dr.scanned} items -> +${dr.created} atoms`);
+        }
+      } catch {
+        /* 蒸馏失败不阻塞采集 */
+      }
     } catch (e) {
       console.error("[wl-live] quick ingest failed:", e instanceof Error ? e.message : String(e));
     } finally {
