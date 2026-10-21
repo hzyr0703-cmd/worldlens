@@ -13,6 +13,8 @@ type Chain = {
   stepCount: number;
   lastStep: string;
   updated_at: string;
+  current_view?: string;
+  next_watch?: string;
 };
 
 type Step = {
@@ -51,7 +53,8 @@ export default async function ChainsPage({
     .prepare(
       `SELECT c.id, c.title, c.thesis, c.status, c.domain, c.confidence, c.updated_at,
               (SELECT COUNT(*) FROM chain_steps s WHERE s.chain_id = c.id) AS stepCount,
-              (SELECT s.claim FROM chain_steps s WHERE s.chain_id = c.id ORDER BY s.seq DESC LIMIT 1) AS lastStep
+              (SELECT s.claim FROM chain_steps s WHERE s.chain_id = c.id ORDER BY s.seq DESC LIMIT 1) AS lastStep,
+              c.current_view, c.next_watch
        FROM chains c WHERE c.status != 'archived' ${statusFilter ? "AND c.status = ?" : ""}
        ORDER BY (c.status = 'broken') DESC, c.updated_at DESC LIMIT 40`
     )
@@ -152,7 +155,9 @@ export default async function ChainsPage({
                         <span className="mono ml-auto text-[10.5px] text-zinc-400 tabular-nums">{c.stepCount} 环</span>
                       </div>
                       <div className="mt-2.5 text-[14.5px] font-semibold leading-snug text-zinc-900">{c.title}</div>
-                      <p className="mt-1.5 text-[12.5px] leading-relaxed text-zinc-500 line-clamp-2">{c.thesis}</p>
+                      <p className="mt-1.5 text-[12.5px] leading-relaxed text-zinc-500 line-clamp-2">
+                        {c.current_view || c.thesis}
+                      </p>
                       {c.lastStep && (
                         <p className="mt-2.5 truncate text-[11.5px] text-zinc-400 mono">最新：{c.lastStep}</p>
                       )}
@@ -175,6 +180,40 @@ export default async function ChainsPage({
                   </div>
                   <h2 className="mt-3 text-[19px] font-semibold tracking-[-0.015em] leading-snug">{detail.title}</h2>
                   <p className="mt-2 text-[13.5px] leading-relaxed text-zinc-600">{detail.thesis}</p>
+
+                  {(detail.current_view || detail.next_watch) && (
+                    <div className="mt-4 space-y-2.5 rounded-xl bg-[#f7fafb] border border-[#e2edf0] p-4">
+                      {detail.current_view && (
+                        <div>
+                          <span className="text-[10.5px] font-bold tracking-wider text-[#007a8c]">现在</span>
+                          <p className="mt-1 text-[13px] leading-relaxed text-zinc-700">{detail.current_view}</p>
+                        </div>
+                      )}
+                      {detail.next_watch && (
+                        <div>
+                          <span className="text-[10.5px] font-bold tracking-wider text-[#b8720c]">接下来看</span>
+                          <p className="mt-1 text-[13px] leading-relaxed text-zinc-700">{detail.next_watch}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {(detail.current_view || detail.next_watch) && (
+                    <div className="mt-4 space-y-2.5 rounded-xl bg-[#f7fafb] border border-[#e2edf0] p-4">
+                      {detail.current_view && (
+                        <div>
+                          <span className="text-[10.5px] font-bold tracking-wider text-[#007a8c]">现在</span>
+                          <p className="mt-1 text-[13px] leading-relaxed text-zinc-700">{detail.current_view}</p>
+                        </div>
+                      )}
+                      {detail.next_watch && (
+                        <div>
+                          <span className="text-[10.5px] font-bold tracking-wider text-[#b8720c]">接下来看</span>
+                          <p className="mt-1 text-[13px] leading-relaxed text-zinc-700">{detail.next_watch}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="mt-6 space-y-0">
                     {steps.map((s, i) => {

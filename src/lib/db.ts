@@ -34,6 +34,8 @@ function initSchema(db: DatabaseSync) {
   for (const ddl of [
     `ALTER TABLE nuggets ADD COLUMN origin TEXT NOT NULL DEFAULT 'auto'`,
     `ALTER TABLE chain_steps ADD COLUMN nugget_id INTEGER`,
+    `ALTER TABLE chains ADD COLUMN current_view TEXT DEFAULT ''`,
+    `ALTER TABLE chains ADD COLUMN next_watch TEXT DEFAULT ''`,
     `ALTER TABLE nuggets ADD COLUMN user_answer TEXT DEFAULT ''`,
     `ALTER TABLE nuggets ADD COLUMN ai_correction TEXT DEFAULT ''`,
     `ALTER TABLE articles ADD COLUMN refined TEXT DEFAULT ''`,
