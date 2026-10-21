@@ -162,8 +162,8 @@ export default function Home() {
           index="00"
           kicker="Daily Brief"
           title="今天，引擎理解到的世界"
-          href="/api/digest"
-          linkText="重新生成"
+          href="/briefs"
+          linkText="往期简报"
         />
         {digestRow ? (
           <div className="stagger">

@@ -20,6 +20,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/", label: "首页" },
       { href: "/watch", label: "监控" },
+      { href: "/search", label: "搜索" },
     ],
   },
   {
