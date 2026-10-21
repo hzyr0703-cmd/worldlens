@@ -31,9 +31,9 @@ export default function Hero({
   latestItems: TileData[];
 }) {
   return (
-    <section className="relative pt-10 sm:pt-16">
+    <section className="relative pt-6 sm:pt-10">
       {/* Mobbin 招牌的极淡方格底纹，藏在标题后方 */}
-      <div className="grid-veil pointer-events-none absolute inset-x-0 top-0 h-[620px]" aria-hidden />
+      <div className="grid-veil pointer-events-none absolute inset-x-0 top-0 h-[420px]" aria-hidden />
 
       {/* 巨型标题 */}
       <div className="relative text-center">
@@ -118,7 +118,7 @@ export default function Hero({
       <TileMatrix initialTiles={latestItems} />
 
       {/* 信源墙 — 对应 Mobbin 的 "Trusted by teams and agents at"，读真实启用源 */}
-      <div className="mt-16 sm:mt-20">
+      <div className="mt-10 sm:mt-14">
         <p className="text-center text-[13px] text-zinc-400">
           {sources.length} 个启用信源 · T0–T3 分级 · 每条信息可溯源
         </p>

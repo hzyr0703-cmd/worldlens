@@ -4,6 +4,8 @@ import { llmStatsToday } from "@/lib/extract/llm";
 import { pendingCount, pendingVerifyCount } from "@/lib/review/fsrs";
 import { detectConflicts } from "@/lib/radar/detect";
 import { renderMarkdown } from "@/lib/md";
+import DigestFold from "@/components/DigestFold";
+import DigestPending from "@/components/DigestPending";
 import { listChains } from "@/lib/chain/builder";
 import { ActionsBar } from "@/components/ActionsBar";
 import CountUp from "@/components/CountUp";
@@ -11,6 +13,18 @@ import Hero from "@/components/Hero";
 import Reveal from "@/components/Reveal";
 
 export const dynamic = "force-dynamic";
+
+/** 从简报 markdown 提取「今日主线」前 3 条作为首屏摘要 */
+function digestSummary(md: string): string {
+  const m = md.match(/## 今日主线([\s\S]*?)(?=\n## |$)/);
+  if (!m) return md.slice(0, 400);
+  const bullets = m[1]
+    .trim()
+    .split("\n")
+    .filter((l) => l.trim().startsWith("-"))
+    .slice(0, 3);
+  return bullets.length ? bullets.join("\n") : md.slice(0, 400);
+}
 
 const TYPE_LABEL: Record<string, string> = {
   mechanism: "机制",
@@ -46,6 +60,9 @@ function SectionHead({ index, kicker, title, href, linkText }: {
 export default function Home() {
   const db = getDb();
   const due = pendingCount();
+  const pendingArticles = (
+    db.prepare(`SELECT COUNT(*) c FROM articles WHERE quizzed = 0`).get() as unknown as { c: number }
+  ).c;
   const today = new Date().toISOString().slice(0, 10);
   const digestRow = db
     .prepare(`SELECT content, stats FROM digests WHERE date = ?`)
@@ -111,40 +128,6 @@ export default function Home() {
   // Hero 方块矩阵用：最新快讯（中文为主，英文 ≤4 条），与 /api/live-tiles 同源
   const latestItems = getLiveTiles();
 
-  const queues = [
-    {
-      href: "/review",
-      label: "复习",
-      en: "Reviews",
-      desc: due > 0 ? `${due} 张卡片到期，用 FSRS 在遗忘前重现` : "暂时没有到期卡片，去读新文章",
-      metric: String(due),
-      accent: due > 0,
-    },
-    {
-      href: "/inbox",
-      label: "文章池",
-      en: "Reading",
-      desc: `${stats.pending_articles} 篇待精读 · 全文可读，AI 出题考你`,
-      metric: String(stats.articles),
-      accent: false,
-    },
-    {
-      href: "/library",
-      label: "认知库",
-      en: "Library",
-      desc: `${stats.nuggets} 枚原子，其中 ${stats.quiz_nuggets} 枚由你亲手答出`,
-      metric: String(stats.nuggets),
-      accent: false,
-    },
-    {
-      href: "/log",
-      label: "世界观日志",
-      en: "Log",
-      desc: "你的判断被哪条新信息印证、修正或推翻",
-      metric: String(stats.items),
-      accent: false,
-    },
-  ];
 
   return (
     <div className="space-y-16 sm:space-y-24 lg:space-y-32">
@@ -192,19 +175,14 @@ export default function Home() {
                 </span>
                 <span className="sec-index mono">{today} · 实时引擎叙事 · 每小时随新信息重算</span>
               </div>
-              <div
-                className="digest-md text-[14px] text-zinc-700"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(digestRow.content) }}
+              <DigestFold
+                summaryHtml={renderMarkdown(digestSummary(digestRow.content))}
+                fullHtml={renderMarkdown(digestRow.content)}
               />
             </div>
           </div>
         ) : (
-          <div className="panel card-in p-10 text-center">
-            <p className="text-[15px] font-medium">今天的简报还没生成</p>
-            <p className="text-[13.5px] text-zinc-500 mt-2">
-              每日 08:00 自动生成；也可点上方「生成简报」立即触发。
-            </p>
-          </div>
+          <DigestPending />
         )}
       </section>
 
@@ -290,104 +268,42 @@ export default function Home() {
       )}
 
 
-      {/* ── 到期复习：唯一高亮卡 ── */}
-      {due > 0 && (
-        <a href="/review" className="neon-card card-in block rounded-2xl px-6 py-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-[17px] font-semibold tracking-[-0.01em]">
-                {due} 张卡片到期 — 先复习，再 intake
-              </div>
-              <div className="text-[13px] text-zinc-500 mt-1.5">
-                回忆是磨损的过程，也是拥有的过程。
-              </div>
-            </div>
-            <span className="pill pill-active shrink-0">开始 →</span>
-          </div>
-        </a>
-      )}
-
-      {/* ── 四个队列 ── */}
-      <section>
-        <Reveal>
-          <SectionHead
-            index="03"
-            kicker="Queues"
-            title="四个队列，构成一次完整训练"
-          />
-          <div className="stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {queues.map((q) => (
-              <a key={q.href} href={q.href} className="panel card-in p-5 sm:p-7 flex flex-col min-h-[132px] lg:min-h-[212px] group">
-                <div className="flex items-center justify-between">
-                  <span className="text-[14px] font-semibold">{q.label}</span>
-                  <span className={`tag ${q.accent ? "tag-accent" : "tier-3"}`}>{q.en}</span>
-                </div>
-                <p className="text-[13px] leading-[1.7] text-zinc-500 mt-3 sm:mt-4 flex-1">{q.desc}</p>
-                <div className="flex items-end justify-between mt-4">
-                  <span className="mono text-[26px] sm:text-[32px] font-semibold tracking-[-0.025em] leading-none tabular-nums">
-                    <CountUp value={Number(q.metric)} />
-                  </span>
-                  <span className="text-zinc-300 group-hover:text-[#007a8c] group-hover:translate-x-0.5 transition-all duration-200">
-                    →
-                  </span>
+      {/* ═══ 03 · 今日待办 —— 只有真有事才出现 ═══ */}
+      {(due > 0 || pendingArticles > 0) && (
+        <section className="mt-20 sm:mt-28">
+          <SectionHead index="03" kicker="Today" title="今天要做的" />
+          <div className="stagger grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {due > 0 && (
+              <a href="/review" className="neon-card card-in block rounded-2xl px-6 py-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-[16px] font-semibold tracking-[-0.01em]">{due} 张卡片到期</div>
+                    <div className="text-[12.5px] text-zinc-500 mt-1">回忆是磨损的过程，也是拥有的过程</div>
+                  </div>
+                  <span className="pill pill-active shrink-0">复习 →</span>
                 </div>
               </a>
-            ))}
+            )}
+            {pendingArticles > 0 && (
+              <a href="/inbox" className="panel card-in block rounded-2xl px-6 py-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-[16px] font-semibold tracking-[-0.01em]">{pendingArticles} 篇长文待精读</div>
+                    <div className="text-[12.5px] text-zinc-500 mt-1">想深挖时再来，不读也不影响看链条</div>
+                  </div>
+                  <span className="pill shrink-0">文章池 →</span>
+                </div>
+              </a>
+            )}
           </div>
-        </Reveal>
-      </section>
-
-      {/* ── 深度文章 ── */}
-      <section>
-        <Reveal>
-          <SectionHead
-            index="04"
-            kicker="Reading"
-            title="最新入库的深度文章"
-            href="/inbox"
-            linkText="全部文章"
-          />
-          {recent.length === 0 ? (
-            <div className="panel p-10 text-center">
-              <p className="text-[13.5px] text-zinc-500">文章池是空的。点上方「供给今日精读」自动抓取，或去文章池手动投喂。</p>
-            </div>
-          ) : (
-            <div className="stagger grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {recent.map((a) => (
-                <a
-                  key={a.id}
-                  href={`/read/${a.id}`}
-                  className="panel card-in p-5 sm:p-8 flex flex-col min-h-[150px] lg:min-h-[228px] group"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`tag ${a.domain === "finance" ? "tier-0" : "tier-2"}`}>
-                      {a.domain === "finance" ? "财经" : a.domain === "ai" ? "AI" : "科技"}
-                    </span>
-                    <span className="mono text-[11px] text-zinc-400 tabular-nums">{a.word_count} 字</span>
-                  </div>
-                  <h3 className="text-[15.5px] sm:text-[17px] font-semibold leading-[1.38] mt-4 sm:mt-5 flex-1 tracking-[-0.018em] group-hover:text-[#007a8c] transition-colors duration-200">
-                    {a.title}
-                  </h3>
-                  <div className="flex items-center justify-between mt-4 sm:mt-6 pt-3.5 sm:pt-5 border-t border-zinc-200">
-                    <span className="mono text-[11px] text-zinc-400 tabular-nums">
-                      {a.added_at.slice(5, 10)}
-                    </span>
-                    <span className="text-[12px] text-zinc-400 group-hover:text-[#007a8c] font-medium transition-colors duration-200">
-                      {a.quizzed ? "已拷问 →" : "开始精读 →"}
-                    </span>
-                  </div>
-                </a>
-              ))}
-            </div>
-          )}
-        </Reveal>
-      </section>
+        </section>
+      )}
 
       {/* ── 认知原子 ── */}
       <section>
         <Reveal>
           <SectionHead
-            index="05"
+            index="04"
             kicker="Nuggets"
             title="最近沉淀的认知原子"
             href="/library"
@@ -418,57 +334,7 @@ export default function Home() {
         </Reveal>
       </section>
 
-      {/* ── 方法论 ── */}
-      <Reveal>
-        <section className="rounded-3xl bg-zinc-900 text-white px-6 sm:px-12 py-10 sm:py-16 relative overflow-hidden">
-          <div
-            className="pointer-events-none absolute inset-0 opacity-[0.16]"
-            style={{
-              background:
-                "radial-gradient(680px 300px at 8% 0%, #00b8d4, transparent 62%), radial-gradient(560px 280px at 100% 100%, #e8447f, transparent 60%)",
-            }}
-          />
-          {/* 细网格底纹，压在渐变之上增加质感 */}
-          <div
-            className="pointer-events-none absolute inset-0 opacity-[0.5]"
-            style={{
-              backgroundImage:
-                "linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px)",
-              backgroundSize: "44px 44px",
-              maskImage: "radial-gradient(700px 340px at 50% 0%, #000, transparent 76%)",
-              WebkitMaskImage: "radial-gradient(700px 340px at 50% 0%, #000, transparent 76%)",
-            }}
-            aria-hidden
-          />
-          <div className="relative">
-            <div className="flex items-center gap-3">
-              <span className="sec-index mono text-white/40">04</span>
-              <span className="h-px w-8 bg-white/20" />
-              <span className="mono text-[11px] uppercase tracking-[0.16em] text-[#00b8d4]">
-                How it works
-              </span>
-            </div>
-            <h2 className="text-[28px] sm:text-[46px] font-semibold tracking-[-0.038em] leading-[1.08] mt-5 max-w-[18ch]">
-              阅读不产生认知，<br />
-              <span className="text-white/45">回忆才产生认知</span>。
-            </h2>
-            <div className="mt-8 sm:mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-7 sm:gap-y-10 stagger">
-              {[
-                { n: "01", t: "收集", d: "从 T0–T3 分级信源抓取真实信息与深度长文，去重留证。" },
-                { n: "02", t: "精读", d: "全文可读，不做碎片摘要。原文长度决定理解深度。" },
-                { n: "03", t: "拷问", d: "AI 按认知原子类型出 4–6 道简答题，你必须先答。" },
-                { n: "04", t: "留存", d: "AI 指出对在哪、漏什么，你的表述成为原子并进入 FSRS 复习。" },
-              ].map((s) => (
-                <div key={s.n} className="border-t border-white/12 pt-5 card-in">
-                  <div className="mono text-[12px] text-[#00b8d4] tabular-nums">{s.n}</div>
-                  <div className="text-[17px] font-semibold mt-2.5 tracking-[-0.01em]">{s.t}</div>
-                  <p className="text-[13px] leading-relaxed text-zinc-400 mt-2.5">{s.d}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      </Reveal>
+      
     </div>
   );
 }
