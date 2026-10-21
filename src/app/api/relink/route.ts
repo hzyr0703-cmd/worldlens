@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { linkNewAtoms } from "@/lib/links/linker";
+import { linkNewAtomsBatch } from "@/lib/links/linker";
 
 export const maxDuration = 300;
 
@@ -15,13 +15,13 @@ export async function POST(req: NextRequest) {
       `SELECT n.id FROM nuggets n
        WHERE n.status != 'retired'
          AND NOT EXISTS (SELECT 1 FROM nugget_links l WHERE l.src_id = n.id OR l.dst_id = n.id)
-       ORDER BY n.id LIMIT 40`
+       ORDER BY n.id LIMIT 60`
     )
     .all() as unknown as { id: number }[];
 
   if (orphans.length === 0) return NextResponse.json({ ok: true, scanned: 0, ...{ links: 0, reinforced: 0, contradicted: 0 } });
 
-  const r = await linkNewAtoms(
+  const r = await linkNewAtomsBatch(
     orphans.map((o) => o.id),
     new Date().toISOString().slice(0, 10)
   );

@@ -134,3 +134,116 @@ export async function linkNewAtoms(
 
   return { links, reinforced, contradicted };
 }
+/** 批量连边：一次 LLM 调用处理多个新原子（每批 6 个），吞吐提升约 6 倍。
+ *  单个原子的 FTS 候选搜索仍独立（便宜），只有关系判断合并调用。 */
+export async function linkNewAtomsBatch(
+  nids: number[],
+  onDate: string
+): Promise<{ links: number; reinforced: number; contradicted: number; batches: number }> {
+  const db = getDb();
+  let links = 0;
+  let reinforced = 0;
+  let contradicted = 0;
+  let batches = 0;
+
+  const CHUNK = 6;
+  for (let start = 0; start < nids.length; start += CHUNK) {
+    const chunk = nids.slice(start, start + CHUNK);
+    type Prepared = { nid: number; statement: string; candidates: { id: number; statement: string }[] };
+    const prepared: Prepared[] = [];
+
+    // 逐个准备候选（纯本地查询，无 LLM）
+    for (const nid of chunk) {
+      const nugget = db.prepare(`SELECT id, statement FROM nuggets WHERE id = ?`).get(nid) as unknown as
+        | { id: number; statement: string }
+        | undefined;
+      if (!nugget) continue;
+      const terms = searchTerms(nugget.statement, 10);
+      const longTerms = terms.filter((x) => x.length >= 3);
+      const shortTerms = terms.filter((x) => x.length < 3);
+      const seen = new Set<number>([nid]);
+      const candidates: { id: number; statement: string }[] = [];
+      try {
+        if (longTerms.length) {
+          const rows = db
+            .prepare(
+              `SELECT n.id, n.statement FROM nuggets n JOIN nuggets_fts f ON n.id = f.rowid
+               WHERE nuggets_fts MATCH ? AND n.id != ? AND n.status != 'retired'
+               ORDER BY rank LIMIT 8`
+            )
+            .all(longTerms.map((x) => `"${x}"`).join(" OR "), nid) as unknown as { id: number; statement: string }[];
+          for (const r of rows) if (!seen.has(r.id)) { seen.add(r.id); candidates.push(r); }
+        }
+        if (shortTerms.length && candidates.length < 5) {
+          const like = shortTerms.map(() => `statement LIKE ?`).join(" OR ");
+          const rows = db
+            .prepare(`SELECT id, statement FROM nuggets WHERE id != ? AND status != 'retired' AND (${like}) LIMIT 5`)
+            .all(nid, ...shortTerms.map((x) => `%${x}%`)) as unknown as { id: number; statement: string }[];
+          for (const r of rows) if (!seen.has(r.id)) { seen.add(r.id); candidates.push(r); }
+        }
+      } catch {
+        continue;
+      }
+      if (candidates.length > 0) prepared.push({ nid, statement: nugget.statement, candidates });
+    }
+
+    if (prepared.length === 0) continue;
+
+    const prompt =
+      "【新原子及各自候选】\n" +
+      prepared
+        .map(
+          (p, i) =>
+            `[idx:${i}] ${p.statement}\n  候选: ${p.candidates.map((c) => `[id:${c.id}] ${c.statement.slice(0, 60)}`).join(" | ")}`
+        )
+        .join("\n\n") +
+      "\n\n输出 JSON 数组（只输出真实成立的关系，宁缺毋滥）：[{\"src_idx\":0,\"dst_id\":12,\"relation\":\"supports\",\"rationale\":\"…\"}]";
+
+    let parsed: { src_idx: number; dst_id: number; relation: string; rationale?: string }[] = [];
+    try {
+      const raw = await chat(LINK_SYSTEM, prompt, { maxTokens: 3000, temperature: 0.1, purpose: "link_batch" });
+      parsed = parseJsonArray(raw);
+      batches++;
+    } catch {
+      continue;
+    }
+
+    for (const l of parsed) {
+      const src = prepared[Number(l.src_idx)];
+      if (!src) continue;
+      if (!RELATIONS.includes(l.relation as (typeof RELATIONS)[number])) continue;
+      if (!src.candidates.some((c) => c.id === l.dst_id)) continue;
+
+      const r = db
+        .prepare(
+          `INSERT INTO nugget_links (src_id, dst_id, relation, rationale) VALUES (?, ?, ?, ?)
+           ON CONFLICT(src_id, dst_id, relation) DO NOTHING`
+        )
+        .run(src.nid, l.dst_id, l.relation, (l.rationale ?? "").slice(0, 300));
+      if (r.changes === 0) continue;
+      links++;
+
+      if (l.relation === "supports") {
+        const self = db.prepare(`SELECT confidence FROM nuggets WHERE id = ?`).get(src.nid) as unknown as { confidence: number };
+        const bump = 0.1 * Math.min(1, Math.max(0.2, self?.confidence ?? 0.6));
+        db.prepare(`UPDATE nuggets SET confidence = MIN(0.95, confidence + ?), status = 'reinforced' WHERE id = ?`).run(bump, l.dst_id);
+        db.prepare(`INSERT INTO worldview_log (nugget_id, action, detail, batch_date) VALUES (?, 'reinforced', ?, ?)`).run(
+          l.dst_id,
+          `被新原子佐证: ${src.statement.slice(0, 120)}`,
+          onDate
+        );
+        reinforced++;
+      } else if (l.relation === "contradicts") {
+        db.prepare(`UPDATE nuggets SET status = 'challenged' WHERE id = ?`).run(l.dst_id);
+        db.prepare(`INSERT INTO worldview_log (nugget_id, action, detail, batch_date) VALUES (?, 'challenged', ?, ?)`).run(
+          l.dst_id,
+          `被新原子挑战: ${src.statement.slice(0, 120)} — ${(l.rationale ?? "").slice(0, 150)}`,
+          onDate
+        );
+        contradicted++;
+      }
+    }
+  }
+
+  return { links, reinforced, contradicted, batches };
+}
