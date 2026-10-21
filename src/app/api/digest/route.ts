@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { buildDigest } from "@/lib/digest/daily";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get("date") ?? undefined;
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { date } = (await req.json().catch(() => ({}))) as { date?: string };
-  const built = await buildDigest(date);
+  const { date, deep } = (await req.json().catch(() => ({}))) as { date?: string; deep?: boolean };
+  const built = await buildDigest(date, { deep: Boolean(deep) });
   return NextResponse.json(built);
 }

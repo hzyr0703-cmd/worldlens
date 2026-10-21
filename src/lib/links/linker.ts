@@ -90,10 +90,10 @@ export async function linkNewAtoms(
 
     let parsed: { src_idx: number; dst_id: number; relation: string; rationale?: string }[] = [];
     try {
-      const raw = await chat(LINK_SYSTEM, prompt, { maxTokens: 2048, temperature: 0.1, purpose: "link" });
+      const raw = await chat(LINK_SYSTEM, prompt, { maxTokens: 4000, temperature: 0.1, purpose: "link" });
       parsed = parseJsonArray(raw);
       if (parsed.length === 0) {
-        const raw2 = await chat(LINK_SYSTEM, prompt, { maxTokens: 2048, temperature: 0.3, purpose: "link_retry" });
+        const raw2 = await chat(LINK_SYSTEM, prompt, { maxTokens: 4000, temperature: 0.3, purpose: "link_retry" });
         parsed = parseJsonArray(raw2);
       }
     } catch {
@@ -201,7 +201,7 @@ export async function linkNewAtomsBatch(
 
     let parsed: { src_idx: number; dst_id: number; relation: string; rationale?: string }[] = [];
     try {
-      const raw = await chat(LINK_SYSTEM, prompt, { maxTokens: 3000, temperature: 0.1, purpose: "link_batch" });
+      const raw = await chat(LINK_SYSTEM, prompt, { maxTokens: 6000, temperature: 0.1, purpose: "link_batch" });
       parsed = parseJsonArray(raw);
       batches++;
     } catch {

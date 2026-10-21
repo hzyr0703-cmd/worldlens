@@ -99,7 +99,7 @@ export async function generateQuiz(articleId: number): Promise<number> {
 ${round > 0 ? `注意：上一轮出题不足，这轮请务必输出完整的 4 题。已有题目（不要重复）：${questions.map((q) => q.question).join("；")}` : ""}
 只输出 JSON 数组：[{"q_order":1,"question":"...","expects":"..."}]`,
       `标题: ${article.title}\n\n正文(精炼稿):\n${source}`,
-      { maxTokens: 4096, temperature: round === 0 ? 0.3 : 0.45, purpose: round === 0 ? "generate_quiz" : "generate_quiz_retry" }
+      { maxTokens: 8000, temperature: round === 0 ? 0.3 : 0.45, purpose: round === 0 ? "generate_quiz" : "generate_quiz_retry" }
     );
     const seen = new Set(questions.map((q) => q.question));
     for (const q of batch) {

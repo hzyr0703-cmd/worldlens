@@ -46,7 +46,7 @@ export async function chat(
         max_tokens: opts?.maxTokens ?? 1024,
         temperature: opts?.temperature ?? 0.2,
       }),
-      signal: AbortSignal.timeout(180000),
+      signal: AbortSignal.timeout(300000),
     });
     if (!res.ok) throw new Error(`LLM ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const data = (await res.json()) as {

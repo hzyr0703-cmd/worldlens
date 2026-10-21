@@ -58,7 +58,7 @@ function allAtoms(): { id: number; type: string; statement: string }[] {
     .all() as unknown as { id: number; type: string; statement: string }[];
 }
 
-export async function buildDigest(date?: string): Promise<{ date: string; content: string }> {
+export async function buildDigest(date?: string, opts?: { deep?: boolean }): Promise<{ date: string; content: string; model: string }> {
   const db = getDb();
   const d = date ?? new Date().toISOString().slice(0, 10);
 
@@ -160,11 +160,11 @@ C. 用户的认知原子库（用户长期保存、亲手沉淀的理解）
 纪律：只输出 markdown，不要客套；「对话」两节是简报的灵魂，「水面之下」是简报的锋利处——宁可少而真，不可多而凑；但真实的对照要写透（机制+影响），不要一句话带过。`,
       `【A. 今日快讯】\n${corpus.slice(0, 9000)}\n\n【B. 同实体历史主张（近30天）】\n${histBlock.slice(0, 3500)}\n\n【C. 用户认知原子库】\n${atomBlock.slice(0, 2500)}\n\n【D. 今日 T0 公告（交易所公告库，最硬证据）】\n${announcements.length ? announcements.map((a) => `- ${a.content.slice(0, 18)} ${a.title}`).join("\n") : "（今日无公告）"}\n\n【E. 已注册的验证点（来自知识链条，务必沿用）】\n${verifyPoints.length ? verifyPoints.map((v) => `- [${v.verify_by} 到期] ${v.title}：${v.claim.slice(0, 80)}`).join("\n") : "（暂无）"}`,
       {
-        maxTokens: 6500,
+        maxTokens: 8000,
         temperature: 0.35,
         purpose: "digest_v3",
         // 分级路由：简报的「水面之下」需要利益推理能力，用强模型；其余环节仍走便宜的 flash
-        model: process.env.DIGEST_MODEL || "glm-4.6",
+        model: opts?.deep ? (process.env.DIGEST_DEEP_MODEL || "glm-4.6") : (process.env.DIGEST_MODEL || "glm-4-flash"),
       }
     );
     content = `# WorldLens 每日简报 · ${d}\n\n${content}`;
@@ -185,7 +185,7 @@ C. 用户的认知原子库（用户长期保存、亲手沉淀的理解）
        created_at = datetime('now')`
   ).run(d, content, JSON.stringify(statsRow));
 
-  return { date: d, content };
+  return { date: d, content, model: opts?.deep ? "deep" : "free" };
 }
 
 /** 首页用：命中实体的热度榜（近7天） */

@@ -211,11 +211,11 @@ export async function distillDaily(date?: string, limit = 400): Promise<DistillR
 
     let candidates: RawNugget[] = [];
     try {
-      const raw = await chat(DISTILL_SYSTEM, text, { maxTokens: 4096, temperature: 0.2, purpose: "distill", model: process.env.DISTILL_MODEL || "glm-4.6" });
+      const raw = await chat(DISTILL_SYSTEM, text, { maxTokens: 8000, temperature: 0.2, purpose: "distill", model: process.env.DISTILL_MODEL || "glm-4-flash" });
       candidates = parseJsonArray<RawNugget>(raw).slice(0, 4); // 偏精：单批上限 4
       if (candidates.length === 0) {
         // JSON 失败重试一次（温度+0.2）
-        const raw2 = await chat(DISTILL_SYSTEM, text, { maxTokens: 4096, temperature: 0.4, purpose: "distill_retry", model: process.env.DISTILL_MODEL || "glm-4.6" });
+        const raw2 = await chat(DISTILL_SYSTEM, text, { maxTokens: 8000, temperature: 0.4, purpose: "distill_retry", model: process.env.DISTILL_MODEL || "glm-4-flash" });
         candidates = parseJsonArray<RawNugget>(raw2).slice(0, 4);
       }
     } catch (e) {

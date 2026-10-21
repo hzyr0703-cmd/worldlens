@@ -6,6 +6,7 @@ import { detectConflicts } from "@/lib/radar/detect";
 import { renderMarkdown } from "@/lib/md";
 import DigestFold from "@/components/DigestFold";
 import DigestPending from "@/components/DigestPending";
+import DigestDeepButton from "@/components/DigestDeepButton";
 import { listChains } from "@/lib/chain/builder";
 import { ActionsBar } from "@/components/ActionsBar";
 import CountUp from "@/components/CountUp";
@@ -174,6 +175,7 @@ export default function Home() {
                   <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#00b8d4]" />
                 </span>
                 <span className="sec-index mono">{today} · 实时引擎叙事 · 每小时随新信息重算</span>
+                <span className="ml-auto"><DigestDeepButton /></span>
               </div>
               <DigestFold
                 summaryHtml={renderMarkdown(digestSummary(digestRow.content))}
