@@ -55,7 +55,8 @@ async function llmExtraEntities(text: string, known: Set<string>): Promise<strin
   try {
     const out = await chat(
       "你是金融信息实体抽取器。从文本中抽取[公司/宏观机构/概念]实体，只输出JSON数组，每项为{name,type}，type∈company|macro|concept。不要输出词典已有实体。无新实体输出[]。",
-      `已有实体(勿重复): ${[...known].slice(0, 50).join("、")}\n文本: ${text.slice(0, 1500)}`
+      `已有实体(勿重复): ${[...known].slice(0, 50).join("、")}\n文本: ${text.slice(0, 1500)}`,
+      { maxTokens: 4000, temperature: 0.1, purpose: "extract" }
     );
     const m = out.match(/\[[\s\S]*\]/);
     if (!m) return [];

@@ -411,6 +411,109 @@ export async function refreshChainViews(chainIds: number[]): Promise<number> {
   return updated;
 }
 
+
+/** 为「没有有效验证点」的活跃链补一个未来验证点。
+ *  没有这一步，链条验证体系会空转：老链条的 verify 全是过期日期，
+ *  建链又只在有新信息时才触发，结果永远没有可结算的验证点。 */
+export async function ensureVerifyPoints(limit = 5): Promise<number> {
+  const db = getDb();
+  if (!llmEnabled) return 0;
+
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.title, c.thesis,
+              (SELECT GROUP_CONCAT(s.role || '：' || s.claim, ' ｜ ') FROM chain_steps s WHERE s.chain_id = c.id) AS steps
+       FROM chains c
+       WHERE c.status = 'active'
+         AND NOT EXISTS (
+           SELECT 1 FROM chain_steps s
+           WHERE s.chain_id = c.id AND s.role = 'verify' AND s.verify_by >= date('now')
+         )
+       ORDER BY c.updated_at DESC LIMIT ?`
+    )
+    .all(limit) as unknown as { id: number; title: string; thesis: string; steps: string }[];
+  if (rows.length === 0) return 0;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const list = rows
+    .map((r) => `[chain:${r.id}] ${r.title}｜判断：${r.thesis}\n  环节：${(r.steps ?? "").slice(0, 400)}`)
+    .join("\n\n");
+
+  const prompt = `今天是 ${today}。下面每条知识链都缺少一个「未来可验证的推论」。
+
+为每条链补 1 个验证点：
+- claim：一句可证伪的推论，必须能从该链的机制推出来（形如「若机制成立，X 指标将在 Y 时间内…」），带上具体指标名与方向，不要空泛。
+- verify_by：验证日期，**必须是 ${today} 之后 1-6 个月内的日期**（YYYY-MM-DD），禁止过去日期。
+
+${list}
+
+只输出 JSON 对象：{"points":[{"chain_id":3,"claim":"...","verify_by":"2026-12-31"}]}`;
+
+  let points: { chain_id?: number; claim?: string; verify_by?: string }[] | null = null;
+  try {
+    const raw = await chat(prompt, "只输出 JSON 对象。", {
+      maxTokens: 10000,
+      temperature: 0.4,
+      purpose: "chain_verify_gen",
+      model: CHAIN_MODEL,
+    });
+    const obj = parseJsonObject(raw);
+    const maybe = obj?.points;
+    points = Array.isArray(maybe) ? (maybe as { chain_id?: number; claim?: string; verify_by?: string }[]) : null;
+  } catch (e) {
+    console.error("[chain_verify] failed:", e instanceof Error ? e.message.slice(0, 160) : String(e));
+    return 0;
+  }
+  if (!points || points.length === 0) return 0;
+
+  const insStep = db.prepare(
+    `INSERT INTO chain_steps (chain_id, seq, role, claim, item_ids, verify_by, created_at)
+     VALUES (?, ?, 'verify', ?, '[]', ?, datetime('now'))`
+  );
+  const minDate = new Date(Date.now() + 14 * 86400_000).toISOString().slice(0, 10);
+  let n = 0;
+  const nuggets: { nid: number; statement: string }[] = [];
+
+  for (const pt of points) {
+    const cid = Number(pt.chain_id);
+    const claim = String(pt.claim ?? "").trim();
+    let by = String(pt.verify_by ?? "").slice(0, 10);
+    if (!rows.some((r) => r.id === cid) || claim.length < 8) continue;
+    // 日期护栏：过去或过近的日期直接推到 60 天后，避免又制造一批过期验证点
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(by) || by < minDate) {
+      by = new Date(Date.now() + 60 * 86400_000).toISOString().slice(0, 10);
+    }
+    const seq = (db.prepare(`SELECT COALESCE(MAX(seq),0) s FROM chain_steps WHERE chain_id = ?`).get(cid) as unknown as { s: number }).s + 1;
+    const info = insStep.run(cid, seq, claim.slice(0, 300), by) as unknown as { lastInsertRowid: number | bigint };
+    const stepId = Number(info.lastInsertRowid);
+
+    const ninfo = db
+      .prepare(
+        `INSERT INTO nuggets (type, statement, elaboration, domain, confidence, source_items, distill_date, origin)
+         VALUES ('judgment', ?, ?, 'finance', 0.55, '[]', date('now'), 'chain')`
+      )
+      .run(claim.slice(0, 500), `来自知识链条 #${cid} 的待验证推演（补登记于 ${today}）`) as unknown as {
+      lastInsertRowid: number | bigint;
+    };
+    const nid = Number(ninfo.lastInsertRowid);
+    db.prepare(`UPDATE chain_steps SET nugget_id = ? WHERE id = ?`).run(nid, stepId);
+    nuggets.push({ nid, statement: claim });
+    n++;
+  }
+
+  if (nuggets.length > 0) {
+    try {
+      const { ensureVerifications } = await import("@/lib/verify/ledger");
+      await ensureVerifications(nuggets);
+    } catch {
+      /* 对账卡失败不影响验证点本身 */
+    }
+    refreshChainViewsByRule();
+  }
+  console.log(`[chain_verify] added ${n} verify points for ${rows.length} chains`);
+  return n;
+}
+
 /** 链条列表（页面用）：带环节数与最近环节 */
 export function listChains(limit = 30): {
   id: number; title: string; thesis: string; status: string; domain: string; confidence: number;

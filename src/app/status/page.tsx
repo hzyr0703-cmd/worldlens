@@ -37,6 +37,12 @@ export default async function StatusPage() {
         (SELECT COUNT(*) FROM nugget_links) AS links,
         (SELECT COUNT(*) FROM chains) AS chains,
         (SELECT COUNT(*) FROM chain_steps) AS steps,
+        (SELECT COUNT(*) FROM chain_steps WHERE role = 'verify' AND verify_by >= date('now')) AS verify_valid,
+        (SELECT COUNT(*) FROM nuggets n WHERE n.status != 'retired'
+           AND NOT EXISTS (SELECT 1 FROM nugget_links l WHERE l.src_id = n.id OR l.dst_id = n.id)) AS orphans,
+        (SELECT COUNT(*) FROM chain_steps WHERE role = 'verify' AND verify_by >= date('now')) AS verify_valid,
+        (SELECT COUNT(*) FROM nuggets n WHERE n.status != 'retired'
+           AND NOT EXISTS (SELECT 1 FROM nugget_links l WHERE l.src_id = n.id OR l.dst_id = n.id)) AS orphans,
         (SELECT COUNT(*) FROM entities) AS entities,
         (SELECT COUNT(*) FROM articles) AS articles,
         (SELECT COUNT(*) FROM review_cards WHERE due <= datetime('now')) AS due,
@@ -74,13 +80,13 @@ export default async function StatusPage() {
     {
       label: "蒸馏",
       value: `积压 ${num(counts.backlog)}`,
-      note: `原子 ${num(counts.atoms)} · 连边 ${num(counts.links)}`,
+      note: `原子 ${num(counts.atoms)} · 连边 ${num(counts.links)} · 孤立 ${num(counts.orphans)}`,
       ok: num(counts.backlog) < 1500,
     },
     {
       label: "链条",
       value: `${num(counts.chains)} 条`,
-      note: `${num(counts.steps)} 环 · 每日 08:00 + 简报刷新后建链`,
+      note: `${num(counts.steps)} 环 · 有效验证点 ${num(counts.verify_valid)}`,
       ok: num(counts.chains) > 0,
     },
     {
@@ -125,6 +131,14 @@ export default async function StatusPage() {
             </div>
           ))}
         </div>
+
+        {coverage.filter((c) => c.ok).length < 5 && (
+          <div className="mt-6 rounded-xl border border-[#f0e0c0] bg-[#fdf8ef] px-4 py-3 text-[12.5px] leading-relaxed text-[#8a5a08]">
+            <span className="font-semibold">自动运行覆盖不足</span>：近 7 天只有{' '}
+            {coverage.filter((c) => c.ok).length} 天跑过完整链路。云实例在无人访问时会休眠，休眠期间定时任务不触发；
+            唤醒后 60 秒内会自动补跑当日链路，因此数据断档不会超过一次访问间隔。
+          </div>
+        )}
 
         <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="panel p-6">

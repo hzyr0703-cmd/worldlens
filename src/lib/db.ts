@@ -34,6 +34,8 @@ function initSchema(db: DatabaseSync) {
   for (const ddl of [
     `ALTER TABLE nuggets ADD COLUMN origin TEXT NOT NULL DEFAULT 'auto'`,
     `ALTER TABLE chain_steps ADD COLUMN nugget_id INTEGER`,
+    // 失效信源归一：连接直接失败(000)的源停用，避免每次采集都计入失败、污染健康页
+    `UPDATE sources SET enabled = 0 WHERE name IN ('华尔街日报·中文','澎湃新闻')`,
     `ALTER TABLE chains ADD COLUMN current_view TEXT DEFAULT ''`,
     `ALTER TABLE chains ADD COLUMN next_watch TEXT DEFAULT ''`,
     `ALTER TABLE nuggets ADD COLUMN user_answer TEXT DEFAULT ''`,

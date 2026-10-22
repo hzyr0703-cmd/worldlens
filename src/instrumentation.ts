@@ -29,9 +29,10 @@ export async function register() {
       const sup = await curateAll();
       const r = await distillDaily();
       await buildDigest(); // 每日简报——最初设计的核心产出物
-      const { buildChains } = await import("@/lib/chain/builder");
+      const { buildChains, ensureVerifyPoints } = await import("@/lib/chain/builder");
       const cr = await buildChains(); // 知识链条：信息点 → 因果链
-      console.log(`[wl-cron] chains: +${cr.created} new / +${cr.extended} steps / ${cr.broken} broken`);
+      const vp = await ensureVerifyPoints(5); // 老链条补未来验证点，验证体系不能空转
+      console.log(`[wl-cron] chains: +${cr.created} new / +${cr.extended} steps / ${cr.broken} broken / +${vp} verify pts`);
       try {
         const { getDb } = await import("@/lib/db");
         getDb().exec("PRAGMA wal_checkpoint(TRUNCATE)"); // WAL 卫生：防止 WAL 无限膨胀
@@ -107,16 +108,6 @@ export async function register() {
       } catch {
         /* 蒸馏失败不阻塞采集 */
       }
-      // 蒸馏跟随：每 20 分钟消化 40 条积压（每天 ~2880 条），避免采集远快于理解
-      try {
-        const { distillDaily } = await import("@/lib/distill/pipeline");
-        const dr = await distillDaily(undefined, 40);
-        if (dr.created > 0 || dr.scanned > 0) {
-          console.log(`[wl-live] distilled ${dr.scanned} items -> +${dr.created} atoms`);
-        }
-      } catch {
-        /* 蒸馏失败不阻塞采集 */
-      }
     } catch (e) {
       console.error("[wl-live] quick ingest failed:", e instanceof Error ? e.message : String(e));
     } finally {
@@ -147,8 +138,9 @@ export async function register() {
       const old = row ? JSON.parse(row.stats ?? "{}").claims ?? 0 : -1;
       if (!row || claimsToday - old >= 20) {
         await buildDigest();
-        const { buildChains } = await import("@/lib/chain/builder");
+        const { buildChains, ensureVerifyPoints } = await import("@/lib/chain/builder");
         const cr = await buildChains();
+        await ensureVerifyPoints(2);
         console.log(`[wl-live] digest refreshed (claims ${old} -> ${claimsToday}) · chains +${cr.created}/${cr.extended}`);
       }
     } catch (e) {

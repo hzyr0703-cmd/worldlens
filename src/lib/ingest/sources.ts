@@ -28,9 +28,9 @@ export const SEED_SOURCES: SeedSource[] = [
   { name: "ECB·新闻稿", url: "https://www.ecb.europa.eu/rss/press.html", tier: 0, category: "overseas" },
   { name: "SEC·8-K", url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&output=atom", tier: 0, category: "overseas" },
   { name: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", tier: 2, category: "overseas" },
-  { name: "华尔街日报·中文", url: "https://cn.wsj.com/zh-hans/rss", tier: 1, category: "macro" },
+  // // { name: "华尔街日报·中文", url: "https://cn.wsj.com/zh-hans/rss", tier: 1, category: "macro" },  // 2026-10-22 实测连接失败(000)，已停用  // 2026-10-22 实测连接失败(000)，已停用
   // ---- 国内综合（社会与产业面）----
-  { name: "澎湃新闻", url: "https://feedx.net/rss/thepaper.xml", tier: 2, category: "macro" },
+  // // { name: "澎湃新闻", url: "https://feedx.net/rss/thepaper.xml", tier: 2, category: "macro" },  // 2026-10-22 镜像已失效(000)，已停用  // 2026-10-22 镜像已失效(000)，已停用
   { name: "界面新闻", url: "https://a.jiemian.com/index.php?m=article&a=rss", tier: 2, category: "company" },
   // T1 权威财经快讯（中文主源）
   { name: "财联社·电报", url: `${RSSHUB_BASE}/cls/telegraph`, tier: 1, category: "macro" },

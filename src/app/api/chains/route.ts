@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
-import { buildChains, refreshChainViews, refreshChainViewsByRule } from "@/lib/chain/builder";
+import { buildChains, ensureVerifyPoints, refreshChainViews, refreshChainViewsByRule } from "@/lib/chain/builder";
 import { getDb } from "@/lib/db";
 
 export const maxDuration = 300;
@@ -17,9 +17,11 @@ export async function POST(req: NextRequest) {
       .all() as unknown as { id: number }[]).map((r) => r.id);
     const base = refreshChainViewsByRule(ids); // 规则版保底
     const llm = await refreshChainViews(ids);  // LLM 版覆盖（可能为 0）
-    return NextResponse.json({ ok: true, refreshed: base, llmEnhanced: llm, scanned: ids.length });
+    const verified = await ensureVerifyPoints(5); // 补过期/缺失的验证点
+    return NextResponse.json({ ok: true, refreshed: base, llmEnhanced: llm, verified, scanned: ids.length });
   }
 
   const r = await buildChains();
-  return NextResponse.json({ ok: true, ...r });
+  const verified = await ensureVerifyPoints(3); // 没有新链时也要维护验证点
+  return NextResponse.json({ ok: true, ...r, verified });
 }
