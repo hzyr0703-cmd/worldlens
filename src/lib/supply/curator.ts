@@ -72,7 +72,7 @@ export async function condenseForStorage(body: string): Promise<string | null> {
   for (let i = 0; i < 2; i++) {
     try {
       const out = await chat(prompt, body.slice(0, 30000), {
-        maxTokens: 3000,
+        maxTokens: 12000,
         temperature: i === 0 ? 0.2 : 0.35,
         purpose: i === 0 ? "condense" : "condense_retry",
       });

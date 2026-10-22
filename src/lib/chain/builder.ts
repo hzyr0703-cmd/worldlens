@@ -8,7 +8,7 @@ import { chat, llmEnabled } from "@/lib/extract/llm";
 // 纪律：每个环节必须引用真实 item id；单条孤立信息不成链；无料不输出。
 // ---------------------------------------------------------------------------
 
-const CHAIN_MODEL = process.env.CHAIN_MODEL || "glm-4-flash";
+const CHAIN_MODEL = process.env.CHAIN_MODEL || "sensenova/deepseek-v4-flash";
 
 type DayItem = { id: number; title: string; entities: string | null; polarity: string | null };
 type ChainRow = { id: number; title: string; thesis: string; status: string; steps: string | null };
@@ -159,7 +159,7 @@ ${staleText ? `\n【B2. 验证点已过期的链条（请在 extends 中为它�
   let parsed: Record<string, unknown> | null = null;
   try {
     const raw = await chat(prompt, "请按 JSON 格式输出。", {
-      maxTokens: 8000,
+      maxTokens: 16000,
       temperature: 0.25,
       purpose: "chain_build",
       model: CHAIN_MODEL,
@@ -167,7 +167,7 @@ ${staleText ? `\n【B2. 验证点已过期的链条（请在 extends 中为它�
     parsed = parseJsonObject(raw);
     if (!parsed) {
       const raw2 = await chat(prompt, "只输出 JSON，不要任何解释。", {
-        maxTokens: 8000,
+        maxTokens: 16000,
         temperature: 0.4,
         purpose: "chain_build_retry",
         model: CHAIN_MODEL,
@@ -370,7 +370,7 @@ export async function refreshChainViews(chainIds: number[]): Promise<number> {
   let updated = 0;
   try {
     const raw = await chat(prompt, "只输出 JSON 数组。", {
-      maxTokens: 6000,
+      maxTokens: 10000,
       temperature: 0.3,
       purpose: "chain_view",
       model: CHAIN_MODEL,

@@ -162,21 +162,23 @@ C. 用户的认知原子库（用户长期保存、亲手沉淀的理解）
       promptText,
       `【A. 今日快讯】\n${corpus.slice(0, 9000)}\n\n【B. 同实体历史主张（近30天）】\n${histBlock.slice(0, 3500)}\n\n【C. 用户认知原子库】\n${atomBlock.slice(0, 2500)}\n\n【D. 今日 T0 公告（交易所公告库，最硬证据）】\n${announcements.length ? announcements.map((a) => `- ${a.content.slice(0, 18)} ${a.title}`).join("\n") : "（今日无公告）"}\n\n【E. 已注册的验证点（来自知识链条，务必沿用）】\n${verifyPoints.length ? verifyPoints.map((v) => `- [${v.verify_by} 到期] ${v.title}：${v.claim.slice(0, 80)}`).join("\n") : "（暂无）"}`,
       {
-        maxTokens: opts?.deep ? 14000 : 8000,
+        maxTokens: opts?.deep ? 20000 : 16000,
         temperature: 0.35,
         purpose: "digest_v3",
         // 分级路由：日常用免费 glm-4-flash；深度版优先 glm-4.7-flash（免费推理版）
-        model: opts?.deep ? (process.env.DIGEST_DEEP_MODEL || "glm-4.7-flash") : (process.env.DIGEST_MODEL || "glm-4-flash"),
+        model: opts?.deep
+          ? process.env.DIGEST_DEEP_MODEL || "sensenova/glm-5.2"
+          : process.env.DIGEST_MODEL || "sensenova/glm-5.2",
       }
     ).catch(async (e: unknown) => {
       // 4.7-flash 免费额度限流（1305）时自动降级到 glm-4.6（付费但稳定）
       if (opts?.deep && e instanceof Error && /1305|429|访问量过大/.test(e.message)) {
         console.warn("[digest] deep model rate-limited, falling back to glm-4.6");
         return chat(promptText, "请按 JSON 格式输出。", {
-          maxTokens: 8000,
+          maxTokens: 16000,
           temperature: 0.35,
           purpose: "digest_deep_fallback",
-          model: process.env.DIGEST_DEEP_FALLBACK || "glm-4.6",
+          model: process.env.DIGEST_DEEP_FALLBACK || "sensenova/deepseek-v4-flash",
         });
       }
       throw e;

@@ -64,7 +64,7 @@ export async function refineArticle(articleId: number): Promise<string> {
 3. 用简体中文（原文是英文也翻成中文）
 4. 只输出精炼正文，不要任何前言后语`,
     article.body.slice(0, 30000),
-    { maxTokens: 3000, temperature: 0.2, purpose: "refine" }
+    { maxTokens: 6000, temperature: 0.2, purpose: "refine" }
   );
   const clean = refined.trim().slice(0, 6000);
   if (clean.length < 300) throw new Error("refine failed: too short");
@@ -99,7 +99,7 @@ export async function generateQuiz(articleId: number): Promise<number> {
 ${round > 0 ? `注意：上一轮出题不足，这轮请务必输出完整的 4 题。已有题目（不要重复）：${questions.map((q) => q.question).join("；")}` : ""}
 只输出 JSON 数组：[{"q_order":1,"question":"...","expects":"..."}]`,
       `标题: ${article.title}\n\n正文(精炼稿):\n${source}`,
-      { maxTokens: 8000, temperature: round === 0 ? 0.3 : 0.45, purpose: round === 0 ? "generate_quiz" : "generate_quiz_retry" }
+      { maxTokens: 12000, temperature: round === 0 ? 0.3 : 0.45, purpose: round === 0 ? "generate_quiz" : "generate_quiz_retry" }
     );
     const seen = new Set(questions.map((q) => q.question));
     for (const q of batch) {
@@ -157,7 +157,7 @@ export async function gradeAnswer(quizId: number, answer: string): Promise<strin
 其中 type 取值：mechanism/pattern/fact/counterexample/judgment/question/norm；domain 取值：finance/ai/tech；pass：值得长期保存=1 否则=0
 用中文，点评部分总共不超过 200 字。`,
     `文章标题: ${row.title}\n文章(精炼稿): ${source.slice(0, 6000)}\n\n问题: ${row.question}\n标准要点: ${row.expects}\n\n读者回答: ${answer || "（空白）"}`,
-    { maxTokens: 2048, temperature: 0.2, purpose: "grade_answer" }
+    { maxTokens: 4000, temperature: 0.2, purpose: "grade_answer" }
   );
 
   db.prepare(`UPDATE quizzes SET user_answer = ?, ai_verdict = ?, state = 'answered' WHERE id = ?`).run(
@@ -245,7 +245,7 @@ export async function digestArticle(articleId: number): Promise<{
       const raw = await chat(
         `为每道问答生成一个"变式问法"：同一个知识点，换一个提问角度（换主体/换方向/换场景），凭记忆作答难度相当。保持简体中文。只输出 JSON 数组，顺序与输入一一对应：["变式1","变式2",...]`,
         createdQ.map((c, i) => `[${i}] 问：${c.q}\n答：${c.a}`).join("\n\n"),
-        { maxTokens: 2048, temperature: 0.4, purpose: "variant" }
+        { maxTokens: 4000, temperature: 0.4, purpose: "variant" }
       );
       variants = parseJsonArray<string>(raw);
     } catch {

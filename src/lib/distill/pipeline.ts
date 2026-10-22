@@ -75,8 +75,6 @@ const DISTILL_SYSTEM = `你是认知蒸馏引擎。输入是若干条财经/AI �
 2. 宁缺毋滥——只收真正有长期价值的理解，日常波动、重复信息、纯事件报道不收
 2.5 **类型配比（重要）**：每批输出中 fact **最多 1 条**；优先 mechanism / pattern / judgment / norm。
     若一批里只能抽出一条 fact，宁可少输出也不要凑数——认知库的价值在"解释力"，不在"信息量"。
-2.5 **类型配比（重要）**：每批输出中 fact **最多 1 条**；优先 mechanism / pattern / judgment / norm。
-    若一批里只能抽出一条 fact，宁可少输出也不要凑数——认知库的价值在"解释力"，不在"信息量"。
 2. statement 必须是一句自足的话（脱离原文也能看懂），包含关键数字与主体
 3. elaboration 补充机制解释或上下文，1-3 句
 4. confidence: fact/mechanism/norm 0.7-0.9, judgment 0.4-0.6, question 0.5
@@ -211,11 +209,11 @@ export async function distillDaily(date?: string, limit = 400): Promise<DistillR
 
     let candidates: RawNugget[] = [];
     try {
-      const raw = await chat(DISTILL_SYSTEM, text, { maxTokens: 8000, temperature: 0.2, purpose: "distill", model: process.env.DISTILL_MODEL || "glm-4-flash" });
+      const raw = await chat(DISTILL_SYSTEM, text, { maxTokens: 12000, temperature: 0.2, purpose: "distill", model: process.env.DISTILL_MODEL || "sensenova/deepseek-v4-flash" });
       candidates = parseJsonArray<RawNugget>(raw).slice(0, 4); // 偏精：单批上限 4
       if (candidates.length === 0) {
         // JSON 失败重试一次（温度+0.2）
-        const raw2 = await chat(DISTILL_SYSTEM, text, { maxTokens: 8000, temperature: 0.4, purpose: "distill_retry", model: process.env.DISTILL_MODEL || "glm-4-flash" });
+        const raw2 = await chat(DISTILL_SYSTEM, text, { maxTokens: 12000, temperature: 0.4, purpose: "distill_retry", model: process.env.DISTILL_MODEL || "sensenova/deepseek-v4-flash" });
         candidates = parseJsonArray<RawNugget>(raw2).slice(0, 4);
       }
     } catch (e) {
@@ -294,8 +292,9 @@ export async function distillDaily(date?: string, limit = 400): Promise<DistillR
 
   // ---- Step 2: 连边 —— 统一走共享引擎（蒸馏/拷问同路） ----
   try {
-    const { linkNewAtoms } = await import("@/lib/links/linker");
-    const lr = await linkNewAtoms(newIds, d);
+    // 批量连边：网关 RPM 有限，6 个原子合并一次调用（原来逐原子调用会撞限流）
+    const { linkNewAtomsBatch } = await import("@/lib/links/linker");
+    const lr = await linkNewAtomsBatch(newIds, d);
     result.links += lr.links;
     result.reinforced += lr.reinforced;
     result.contradicted += lr.contradicted;

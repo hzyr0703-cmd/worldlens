@@ -22,7 +22,7 @@ export async function ensureVerifications(items: VerifyInput[]): Promise<number>
 2. by：合理的验证截止日期（YYYY-MM-DD），根据判断涉及的事件节奏估计，一般 3-24 个月
 3. 只输出 JSON 数组，顺序与输入一一对应：[{"idx":0,"condition":"...","by":"2026-12-31"},...]`,
       items.map((it, i) => `[${i}] ${it.statement}`).join("\n\n"),
-      { maxTokens: 2048, temperature: 0.3, purpose: "verify_gen" }
+      { maxTokens: 4000, temperature: 0.3, purpose: "verify_gen" }
     );
     const m = raw.match(/\[[\s\S]*\]/);
     if (m) out = JSON.parse(m[0]);
