@@ -71,6 +71,7 @@ html {
 }
 
 body {
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
@@ -928,6 +929,24 @@ body:has(.read-body) .reading-progress { opacity: 1; }
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* 关键：入场动画靠 animation-fill-mode: backwards 藏初始态。
+     动画不启动时（减少动效 / 截图工具 / 部分 WebView）文字会永远不可见，
+     所以这里强制回到终态——内容可见永远优先于动效。 */
+  .hero-line, .wipe, .hero-kicker, .menu-item, .card-in, .stagger > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    clip-path: none !important;
+    filter: none !important;
+  }
+  /* 子元素也带独立 animation-delay（如数据条的逐个淡入），一并钉到终态 */
+  .hero-line *, .wipe * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    clip-path: none !important;
   }
 }
 

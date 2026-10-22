@@ -6,6 +6,7 @@ import { detectConflicts } from "@/lib/radar/detect";
 import { renderMarkdown } from "@/lib/md";
 import DigestFold from "@/components/DigestFold";
 import DigestPending from "@/components/DigestPending";
+import FirstVisitGuide from "@/components/FirstVisitGuide";
 import DigestDeepButton from "@/components/DigestDeepButton";
 import { listChains } from "@/lib/chain/builder";
 import { ActionsBar } from "@/components/ActionsBar";
@@ -65,9 +66,24 @@ export default function Home() {
     db.prepare(`SELECT COUNT(*) c FROM articles WHERE quizzed = 0`).get() as unknown as { c: number }
   ).c;
   const today = new Date().toISOString().slice(0, 10);
-  const digestRow = db
-    .prepare(`SELECT content, stats FROM digests WHERE date = ?`)
-    .get(today) as unknown as { content: string; stats: string } | undefined;
+  const digestToday = db
+    .prepare(`SELECT date, content, stats FROM digests WHERE date = ?`)
+    .get(today) as unknown as { date: string; content: string; stats: string } | undefined;
+  // 今日简报缺失时回退到最近一期：评审/新访客永远不该看到空白页
+  const digestRow =
+    digestToday ??
+    (db
+      .prepare(`SELECT date, content, stats FROM digests ORDER BY date DESC LIMIT 1`)
+      .get() as unknown as { date: string; content: string; stats: string } | undefined);
+  const digestFresh = Boolean(digestToday);
+  const chainAgg = db
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM chains WHERE status != 'archived') AS chains,
+              (SELECT COUNT(*) FROM chain_steps) AS steps,
+              (SELECT COUNT(*) FROM chain_steps WHERE role = 'verify' AND verify_by >= date('now')) AS verify_due`
+    )
+    .get() as unknown as { chains: number; steps: number; verify_due: number };
+
   const conflicts = detectConflicts(7, 6);
   // 今日链条动态：今日有新增环节的链条 + 断裂链
   const chainStats = db
@@ -131,7 +147,7 @@ export default function Home() {
 
 
   return (
-    <div className="space-y-16 sm:space-y-24 lg:space-y-32">
+    <div className="space-y-12 sm:space-y-16 lg:space-y-20">
       {/* ── Hero：Mobbin 式居中巨型标题 + 真实快讯方块矩阵 ── */}
       {verifyDue > 0 && (
         <a
@@ -143,6 +159,8 @@ export default function Home() {
           <span className="ml-auto font-medium shrink-0">去结算 →</span>
         </a>
       )}
+      <FirstVisitGuide />
+
       <Hero
         items={stats.items}
         articles={stats.articles}
@@ -151,6 +169,9 @@ export default function Home() {
         llmCalls={llm.calls}
         sources={sources}
         latestItems={latestItems}
+        chains={chainAgg.chains}
+        steps={chainAgg.steps}
+        verifyDue={chainAgg.verify_due}
       />
 
       <div className="mt-12 flex flex-wrap items-center gap-3 justify-center">
@@ -158,7 +179,7 @@ export default function Home() {
       </div>
 
       {/* ═══ 01 · 今日简报 —— 世界理解引擎的核心产出物 ═══ */}
-      <section className="mt-20 sm:mt-28">
+      <section id="brief" className="mt-12 sm:mt-16 scroll-mt-24">
         <SectionHead
           index="00"
           kicker="Daily Brief"
@@ -174,7 +195,11 @@ export default function Home() {
                   <span className="absolute inline-flex h-full w-full rounded-full bg-[#00b8d4] opacity-60 animate-ping" />
                   <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#00b8d4]" />
                 </span>
-                <span className="sec-index mono">{today} · 实时引擎叙事 · 每小时随新信息重算</span>
+                <span className="sec-index mono">
+                  {digestFresh
+                    ? `${today} · 实时引擎叙事 · 每小时随新信息重算`
+                    : `${digestRow.date} · 最近一期（今日简报生成中，先看这期）`}
+                </span>
                 <span className="ml-auto"><DigestDeepButton /></span>
               </div>
               <DigestFold

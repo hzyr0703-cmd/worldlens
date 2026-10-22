@@ -106,28 +106,6 @@ export default async function ChainsPage({
           </span>
         </div>
 
-        {/* 状态筛选 */}
-        <div className="mb-6 flex flex-wrap items-center gap-2">
-          {[
-            { v: "", l: "全部", n: totalChains },
-            { v: "active", l: "演进中", n: countOf("active") },
-            { v: "broken", l: "已断裂", n: countOf("broken") },
-            { v: "resolved", l: "已验证", n: countOf("resolved") },
-          ].map((f) => {
-            const qs = new URLSearchParams({ ...(f.v ? { status: f.v } : {}), ...(id ? { id } : {}) });
-            const on = statusFilter === f.v;
-            return (
-              <a key={f.l} href={`/chains?${qs}`} className={`pill magnetic ${on ? "pill-active" : ""}`}>
-                {f.l}
-                <span className="mono ml-1 text-[11px] text-zinc-400 tabular-nums">{f.n}</span>
-              </a>
-            );
-          })}
-          <span className="ml-auto text-[12px] text-zinc-400">
-            每条链的每一环都能点开看原始新闻
-          </span>
-        </div>
-
       <div className="page-body">
         {chains.length === 0 ? (
           <div className="empty">
@@ -180,23 +158,6 @@ export default async function ChainsPage({
                   </div>
                   <h2 className="mt-3 text-[19px] font-semibold tracking-[-0.015em] leading-snug">{detail.title}</h2>
                   <p className="mt-2 text-[13.5px] leading-relaxed text-zinc-600">{detail.thesis}</p>
-
-                  {(detail.current_view || detail.next_watch) && (
-                    <div className="mt-4 space-y-2.5 rounded-xl bg-[#f7fafb] border border-[#e2edf0] p-4">
-                      {detail.current_view && (
-                        <div>
-                          <span className="text-[10.5px] font-bold tracking-wider text-[#007a8c]">现在</span>
-                          <p className="mt-1 text-[13px] leading-relaxed text-zinc-700">{detail.current_view}</p>
-                        </div>
-                      )}
-                      {detail.next_watch && (
-                        <div>
-                          <span className="text-[10.5px] font-bold tracking-wider text-[#b8720c]">接下来看</span>
-                          <p className="mt-1 text-[13px] leading-relaxed text-zinc-700">{detail.next_watch}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
 
                   {(detail.current_view || detail.next_watch) && (
                     <div className="mt-4 space-y-2.5 rounded-xl bg-[#f7fafb] border border-[#e2edf0] p-4">

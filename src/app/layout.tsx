@@ -102,8 +102,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 
         <footer className="border-t border-zinc-200 mt-16">
           <div className="max-w-[1240px] mx-auto px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-3 text-[12.5px] text-zinc-400">
-            <span>WorldLens — 收集 · 精读 · 拷问 · 留存</span>
-            <span className="mono text-[11px] tracking-wide">COLLECT · READ · INTERROGATE · RETAIN</span>
+            <span>WorldLens — 收集 · 建链 · 验证</span>
+            <span className="mono text-[11px] tracking-wide">COLLECT · TRACE · VERIFY</span>
           </div>
         </footer>
       </body>

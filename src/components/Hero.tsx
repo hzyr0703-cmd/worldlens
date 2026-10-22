@@ -13,6 +13,15 @@ import SplitText from "@/components/SplitText";
 import TileMatrix from "@/components/TileMatrix";
 import type { TileData } from "@/lib/tiles";
 
+/** 行内指标：数字用 tabular-nums，单位弱化 */
+function Metric({ value, label }: { value: number; label: string }) {
+  return (
+    <span className="font-semibold text-zinc-800">
+      <span className="tabular-nums">{value}</span> {label}
+    </span>
+  );
+}
+
 export default function Hero({
   items,
   articles,
@@ -21,6 +30,9 @@ export default function Hero({
   llmCalls,
   sources,
   latestItems,
+  chains,
+  steps,
+  verifyDue,
 }: {
   items: number;
   articles: number;
@@ -29,6 +41,9 @@ export default function Hero({
   llmCalls: number;
   sources: string[];
   latestItems: TileData[];
+  chains: number;
+  steps: number;
+  verifyDue: number;
 }) {
   return (
     <section className="relative pt-6 sm:pt-10">
@@ -44,15 +59,15 @@ export default function Hero({
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#00b8d4]" />
           </span>
           <span className="mono text-[11px] uppercase tracking-[0.18em] text-[#007a8c]">
-            Collect · Read · Interrogate · Retain
+            Collect · Trace · Verify
           </span>
         </div>
 
         {/* 逐字遮罩上推 */}
-        <h1 className="mt-7 text-[44px] sm:text-[68px] lg:text-[82px] leading-[0.98] font-semibold tracking-[-0.045em]">
+        <h1 className="mt-7 text-[32px] sm:text-[56px] lg:text-[82px] leading-[1.02] sm:leading-[0.98] font-semibold tracking-[-0.03em] sm:tracking-[-0.045em] break-words">
           <span className="block overflow-hidden">
             <span className="block hero-line" style={{ ["--d" as string]: "80ms" }}>
-              <SplitText text="读过的世界" />
+              <SplitText text="把一天的信息" />
             </span>
           </span>
           <span className="block overflow-hidden">
@@ -60,7 +75,7 @@ export default function Hero({
               className="block hero-line"
               style={{ ["--d" as string]: "200ms" }}
             >
-              <SplitText text="变成你自己的理解" delay={180} />
+              <SplitText text="压成能验证的因果链" delay={180} />
             </span>
           </span>
         </h1>
@@ -75,27 +90,26 @@ export default function Hero({
           className="hero-line wipe mt-7 text-[17px] sm:text-[19px] leading-relaxed text-zinc-600 max-w-[60ch] mx-auto"
           style={{ ["--d" as string]: "420ms" }}
         >
-          <CountUp value={items} /> 条真实信息采集入库，
-          <CountUp value={articles} /> 篇深度长文全文可读。
+          来自 <CountUp value={items} /> 条实采信息、{sources.length} 个信源。引擎不做摘要——
           <br className="hidden sm:block" />
-          AI 不替你理解——它出题、等你作答、指出你漏掉的那一层。
+          它把信息串成 <Metric value={chains} label="条因果链" />，每一环挂着原始出处，到期自动对账。
         </p>
 
         {/* CTA：磁性按钮 + 光泽扫过 */}
         <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
           <a
-            href="/inbox"
+            href="/chains"
             className="cta cta-accent hero-line magnetic"
             style={{ ["--d" as string]: "320ms" }}
           >
-            挑一篇开始精读 <span className="hero-arrow">→</span>
+            看今天的因果链 <span className="hero-arrow">→</span>
           </a>
           <a
-            href="/review"
+            href="#brief"
             className="ghost hero-line magnetic"
             style={{ ["--d" as string]: "380ms" }}
           >
-            {due > 0 ? `${due} 张卡片待复习` : "复习队列"}
+            先读简报
           </a>
         </div>
 
@@ -106,11 +120,11 @@ export default function Hero({
         >
           <span className="mono tabular-nums"><CountUp value={items} /> 信息</span>
           <span className="hero-dot" />
-          <span className="mono tabular-nums"><CountUp value={articles} /> 长文</span>
+          <span className="mono tabular-nums"><CountUp value={chains} /> 条链</span>
           <span className="hero-dot" />
-          <span className="mono tabular-nums"><CountUp value={nuggets} /> 原子</span>
+          <span className="mono tabular-nums"><CountUp value={steps} /> 个环节</span>
           <span className="hero-dot" />
-          <span className="mono tabular-nums">LLM <CountUp value={llmCalls} /> 次/日</span>
+          <span className="mono tabular-nums">待验证 <CountUp value={verifyDue} /> 条</span>
         </div>
       </div>
 
