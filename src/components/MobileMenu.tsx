@@ -9,6 +9,7 @@
  * 交互：点遮罩/关闭键/Esc 退出，打开时锁 body 滚动；列表项错峰上浮入场。
  */
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 export type NavItem = { href: string; label: string };
 
@@ -67,9 +68,10 @@ export default function MobileMenu({ items, cta }: { items: NavItem[]; cta: { hr
 
             <nav className="flex-1 overflow-y-auto px-3 py-4">
               {items.map((l, i) => (
-                <a
+                <Link
                   key={l.href}
                   href={l.href}
+                  prefetch
                   onClick={() => setOpen(false)}
                   className="menu-item flex items-baseline gap-3 px-3 py-3.5 rounded-xl hover:bg-zinc-50 transition-colors duration-150"
                   style={{ ["--d" as string]: `${90 + i * 45}ms` }}
@@ -78,14 +80,14 @@ export default function MobileMenu({ items, cta }: { items: NavItem[]; cta: { hr
                     {String(i + 1).padStart(2, "0")}
                   </span>
                   <span className="text-[17px] font-medium tracking-[-0.01em]">{l.label}</span>
-                </a>
+                </Link>
               ))}
             </nav>
 
             <div className="px-5 py-5 border-t border-zinc-100 shrink-0 flex items-center gap-3">
-              <a href={cta.href} onClick={() => setOpen(false)} className="cta flex-1 justify-center">
+              <Link href={cta.href} prefetch onClick={() => setOpen(false)} className="cta flex-1 justify-center">
                 {cta.label}
-              </a>
+              </Link>
               <a
                 href="/inbox"
                 onClick={() => setOpen(false)}

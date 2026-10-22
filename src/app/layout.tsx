@@ -64,13 +64,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 <span key={g.group} className="flex items-center gap-1">
                   {gi > 0 && <span className="w-px h-4 bg-zinc-200 mx-1.5" aria-hidden />}
                   {g.items.map((l) => (
-                    <a
+                    <Link
                       key={l.href}
                       href={l.href}
+                      prefetch
                       className="nav-link px-3 py-1.5 rounded-full text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors duration-150"
                     >
                       {l.label}
-                    </a>
+                    </Link>
                   ))}
                 </span>
               ))}
@@ -78,12 +79,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 
             <div className="flex items-center gap-2 shrink-0">
               {/* 移动端腾出空间：投喂文章收进菜单，CTA 缩小 */}
-              <a href="/inbox" className="ghost hidden lg:inline-flex magnetic">
+              <Link href="/inbox" prefetch className="ghost hidden lg:inline-flex magnetic">
                 投喂文章
-              </a>
-              <a href="/review" className="cta magnetic !px-3.5 !py-2 sm:!px-4 sm:!py-2.5 !text-[12.5px] sm:!text-[13px]">
+              </Link>
+              <Link href="/review" prefetch className="cta magnetic !px-3.5 !py-2 sm:!px-4 sm:!py-2.5 !text-[12.5px] sm:!text-[13px]">
                 开始复习
-              </a>
+              </Link>
             </div>
           </div>
         </header>

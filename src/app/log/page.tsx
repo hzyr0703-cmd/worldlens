@@ -32,7 +32,7 @@ export default function LogPage() {
     .prepare(
       `SELECT w.*, n.statement AS nugget_statement, n.type
        FROM worldview_log w LEFT JOIN nuggets n ON n.id = w.nugget_id
-       ORDER BY w.id DESC LIMIT 100`
+       ORDER BY w.id DESC LIMIT 60`
     )
     .all() as unknown as (LogRow & { nugget_statement: string | null; type: string })[];
 
