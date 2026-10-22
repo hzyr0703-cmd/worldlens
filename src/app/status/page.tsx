@@ -61,6 +61,15 @@ export default async function StatusPage() {
   const llmTotal = llm.reduce((s, x) => s + num(x.n), 0);
   const llmFails = llm.reduce((s, x) => s + num(x.fails), 0);
 
+  // 健康灯只看「近 2 小时」——今日累计会把已经修好的历史故障一直挂在红灯上
+  const recent = db
+    .prepare(
+      `SELECT COUNT(*) n, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) fails
+       FROM llm_log WHERE created_at >= datetime('now', '-2 hours')`
+    )
+    .get() as unknown as { n: number; fails: number | null };
+  const recentOk = num(recent.n) === 0 || num(recent.fails) / num(recent.n) < 0.15;
+
   // 最近 7 天 cron 是否都成功
   const last7 = db
     .prepare(
@@ -97,9 +106,9 @@ export default async function StatusPage() {
     },
     {
       label: "LLM",
-      value: `${llmTotal} 次调用`,
-      note: `失败 ${llmFails} 次 · 今日`,
-      ok: llmTotal === 0 || llmFails / llmTotal < 0.1,
+      value: num(recent.n) === 0 ? "近 2 小时无调用" : `${num(recent.n)} 次 / 失败 ${num(recent.fails)}`,
+      note: `近 2 小时 · 今日累计 ${llmTotal} 次（失败 ${llmFails}，含修复前历史）`,
+      ok: recentOk,
     },
     {
       label: "自动运行",
@@ -170,7 +179,7 @@ export default async function StatusPage() {
           </div>
 
           <div className="panel p-6">
-            <div className="sec-index mono mb-3">今日模型调用</div>
+            <div className="sec-index mono mb-3">今日模型调用（累计，含修复前历史失败）</div>
             {llm.length === 0 ? (
               <p className="text-[13px] text-zinc-500">今日暂无调用</p>
             ) : (
