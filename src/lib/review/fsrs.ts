@@ -173,41 +173,59 @@ export function settleVerification(
     if (it) evidence = ` [证据#${evidenceItemId}] ${it.title.slice(0, 80)}${it.link ? ` (${it.link})` : ""}`;
   }
 
-  if (outcome === "confirmed") {
-    db.prepare(`UPDATE nuggets SET confidence = MIN(0.95, confidence + 0.15), status = 'reinforced' WHERE id = ?`).run(nid);
-    db.prepare(
-      `INSERT INTO worldview_log (nugget_id, action, detail, batch_date) VALUES (?, 'reinforced', ?, ?)`
-    ).run(nid, `预测对账：验证通过 — ${note.slice(0, 150)}${evidence}`, d);
-  } else if (outcome === "refuted") {
-    db.prepare(`UPDATE nuggets SET confidence = MAX(0.1, confidence - 0.3), status = 'challenged' WHERE id = ?`).run(nid);
-    db.prepare(
-      `INSERT INTO worldview_log (nugget_id, action, detail, batch_date) VALUES (?, 'challenged', ?, ?)`
-    ).run(nid, `预测对账：被现实证伪 — ${note.slice(0, 150)}${evidence}`, d);
-  } else {
-    // 无法验证：对账卡顺延 45 天
+  // 无法验证：只改 due，单条 UPDATE 天然原子，无需事务
+  if (outcome === "unverifiable") {
     const next = new Date(Date.now() + 45 * 86400000).toISOString().slice(0, 19).replace("T", " ");
     db.prepare(`UPDATE review_cards SET due = ? WHERE id = ?`).run(next, cardId);
     return;
   }
 
-  db.prepare(`DELETE FROM review_cards WHERE id = ?`).run(cardId);
-
-  // 链条闭环：该原子若是链条的 verify 环节，结算结果回写链条状态
-  const step = db
-    .prepare(`SELECT id, chain_id FROM chain_steps WHERE nugget_id = ? LIMIT 1`)
-    .get(nid) as unknown as { id: number; chain_id: number } | undefined;
-  if (step) {
-    db.prepare(`UPDATE chain_steps SET verified = ? WHERE id = ?`).run(outcome === "confirmed" ? 1 : -1, step.id);
-    const agg = db
-      .prepare(
-        `SELECT SUM(verified = 1) ok, SUM(verified = -1) bad, COUNT(*) total
-         FROM chain_steps WHERE chain_id = ? AND verified != 0`
-      )
-      .get(step.chain_id) as unknown as { ok: number | null; bad: number | null; total: number };
-    if ((agg.bad ?? 0) > 0) {
-      db.prepare(`UPDATE chains SET status = 'broken', updated_at = datetime('now') WHERE id = ?`).run(step.chain_id);
-    } else if ((agg.ok ?? 0) > 0 && agg.ok === agg.total) {
-      db.prepare(`UPDATE chains SET status = 'resolved', updated_at = datetime('now') WHERE id = ?`).run(step.chain_id);
+  // 结算要同时动原子、日志、卡片、链条四处——任一步失败都必须整体回滚，
+  // 否则会出现"置信度加了 0.15 但卡还在"（下次结算再加一次）这类不可逆污染。
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    if (outcome === "confirmed") {
+      db.prepare(`UPDATE nuggets SET confidence = MIN(0.95, confidence + 0.15), status = 'reinforced' WHERE id = ?`).run(nid);
+      db.prepare(
+        `INSERT INTO worldview_log (nugget_id, action, detail, batch_date) VALUES (?, 'reinforced', ?, ?)`
+      ).run(nid, `预测对账：验证通过 — ${note.slice(0, 150)}${evidence}`, d);
+    } else {
+      db.prepare(`UPDATE nuggets SET confidence = MAX(0.1, confidence - 0.3), status = 'challenged' WHERE id = ?`).run(nid);
+      db.prepare(
+        `INSERT INTO worldview_log (nugget_id, action, detail, batch_date) VALUES (?, 'challenged', ?, ?)`
+      ).run(nid, `预测对账：被现实证伪 — ${note.slice(0, 150)}${evidence}`, d);
     }
+
+    db.prepare(`DELETE FROM review_cards WHERE id = ?`).run(cardId);
+
+    // 链条闭环：同一原子可能挂在多条链上，全部回写（原先 LIMIT 1 只结算第一条）
+    const steps = db
+      .prepare(`SELECT id, chain_id FROM chain_steps WHERE nugget_id = ?`)
+      .all(nid) as unknown as { id: number; chain_id: number }[];
+    const aggStmt = db.prepare(
+      `SELECT SUM(verified = 1) ok, SUM(verified = -1) bad, COUNT(*) total
+       FROM chain_steps WHERE chain_id = ? AND verified != 0`
+    );
+    for (const step of steps) {
+      db.prepare(`UPDATE chain_steps SET verified = ? WHERE id = ?`).run(outcome === "confirmed" ? 1 : -1, step.id);
+      const agg = aggStmt.get(step.chain_id) as unknown as { ok: number | null; bad: number | null; total: number };
+      if ((agg.bad ?? 0) > 0) {
+        db.prepare(`UPDATE chains SET status = 'broken', updated_at = datetime('now') WHERE id = ?`).run(step.chain_id);
+      } else if ((agg.ok ?? 0) > 0 && agg.ok === agg.total) {
+        // 已断裂的链不能被"已验证环节"洗白：断裂环节本身（role=verify, verify_by=''）不参与
+        // verified 统计，若这里无条件改 resolved，一条断裂链只要有一个环节被证实就会复活。
+        db.prepare(
+          `UPDATE chains SET status = 'resolved', updated_at = datetime('now') WHERE id = ? AND status != 'broken'`
+        ).run(step.chain_id);
+      }
+    }
+    db.exec("COMMIT");
+  } catch (e) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      /* 回滚失败时保留原始错误 */
+    }
+    throw e;
   }
 }

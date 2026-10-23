@@ -32,7 +32,14 @@ type Nugget = {
 };
 
 export default function NuggetCard({ nugget, children }: { nugget: Nugget; children?: React.ReactNode }) {
-  const sources = JSON.parse(nugget.source_items ?? "[]") as number[];
+  // 坏 JSON 不该让整页崩（旧数据/手工编辑都可能留下非法值）
+  let sources: number[] = [];
+  try {
+    const parsed = JSON.parse(nugget.source_items ?? "[]");
+    if (Array.isArray(parsed)) sources = parsed.filter((x) => typeof x === "number");
+  } catch {
+    /* 无溯源就渲染空证据链 */
+  }
   const conf = Math.round(nugget.confidence * 100);
   return (
     <article className="panel p-7 hover:border-zinc-300">

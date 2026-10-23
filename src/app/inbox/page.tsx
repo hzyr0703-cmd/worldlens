@@ -7,6 +7,19 @@ import TopicSub from "@/components/TopicSub";
 
 export const dynamic = "force-dynamic";
 
+/** 关注关键词存 prefs 的 JSON；坏值不该让整页 500 */
+function readTopicKeywords(db: ReturnType<typeof getDb>): string[] {
+  try {
+    const row = db.prepare(`SELECT value FROM prefs WHERE key = 'topic_keywords'`).get() as
+      | { value: string }
+      | undefined;
+    const v = JSON.parse(row?.value ?? "[]");
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 type ArticleRow = {
   id: number;
   title: string;
@@ -41,7 +54,7 @@ export default function InboxPage() {
   const longItems = db
     .prepare(
       `SELECT id, title, length(content) AS len FROM items
-       WHERE length(content) >= 800 AND id NOT IN (SELECT CAST(j.value AS INTEGER) FROM articles a, json_each(a.url) j WHERE 0)
+       WHERE length(content) >= 800
          AND id NOT IN (SELECT CAST(substr(url, 9) AS INTEGER) FROM articles WHERE origin = 'rss' AND url LIKE 'item:%')
        ORDER BY id DESC LIMIT 10`
     )
@@ -61,12 +74,7 @@ export default function InboxPage() {
         <PasteArticle />
         <BackfillButton count={pendingDistill} />
 
-        <TopicSub
-          initial={JSON.parse(
-            (db.prepare(`SELECT value FROM prefs WHERE key = 'topic_keywords'`).get() as { value: string } | undefined)
-              ?.value ?? "[]"
-          )}
-        />
+        <TopicSub initial={readTopicKeywords(db)} />
 
         {articles.length > 0 && (
           <Reveal variant="rows">

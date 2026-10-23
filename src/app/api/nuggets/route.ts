@@ -46,7 +46,7 @@ export async function PATCH(req: NextRequest) {
         db.prepare(`UPDATE nuggets SET status = 'revised' WHERE id = ?`).run(id);
         db.prepare(
           `INSERT INTO nugget_links (src_id, dst_id, relation, rationale) VALUES (?, ?, 'extends', ?)`
-        ).run(id, newId, "表述修订：旧表述退役，复习历史留在旧问题上");
+        ).run(newId, id, "表述修订：旧表述退役，复习历史留在旧问题上");
         // 复习卡迁移到新原子：answer 换新表述，FSRS 状态重置（新表述 = 重新记）
         db.prepare(
           `UPDATE review_cards SET nugget_id = ?, answer = ?, fsrs_state = '', due = datetime('now', '+10 minutes')

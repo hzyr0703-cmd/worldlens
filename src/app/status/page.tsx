@@ -40,9 +40,6 @@ export default async function StatusPage() {
         (SELECT COUNT(*) FROM chain_steps WHERE role = 'verify' AND verify_by >= date('now')) AS verify_valid,
         (SELECT COUNT(*) FROM nuggets n WHERE n.status != 'retired'
            AND NOT EXISTS (SELECT 1 FROM nugget_links l WHERE l.src_id = n.id OR l.dst_id = n.id)) AS orphans,
-        (SELECT COUNT(*) FROM chain_steps WHERE role = 'verify' AND verify_by >= date('now')) AS verify_valid,
-        (SELECT COUNT(*) FROM nuggets n WHERE n.status != 'retired'
-           AND NOT EXISTS (SELECT 1 FROM nugget_links l WHERE l.src_id = n.id OR l.dst_id = n.id)) AS orphans,
         (SELECT COUNT(*) FROM entities) AS entities,
         (SELECT COUNT(*) FROM articles) AS articles,
         (SELECT COUNT(*) FROM review_cards WHERE due <= datetime('now')) AS due,

@@ -30,30 +30,8 @@ export function getDb(): DatabaseSync {
 }
 
 function initSchema(db: DatabaseSync) {
-  // v4: nuggets 加"你的参与"字段（幂等迁移，列已存在时忽略报错）
-  for (const ddl of [
-    `ALTER TABLE nuggets ADD COLUMN origin TEXT NOT NULL DEFAULT 'auto'`,
-    `ALTER TABLE chain_steps ADD COLUMN nugget_id INTEGER`,
-    // 失效信源归一：连接直接失败(000)的源停用，避免每次采集都计入失败、污染健康页
-    `UPDATE sources SET enabled = 0 WHERE name IN ('华尔街日报·中文','澎湃新闻')`,
-    `ALTER TABLE chains ADD COLUMN current_view TEXT DEFAULT ''`,
-    `ALTER TABLE chains ADD COLUMN next_watch TEXT DEFAULT ''`,
-    `ALTER TABLE nuggets ADD COLUMN user_answer TEXT DEFAULT ''`,
-    `ALTER TABLE nuggets ADD COLUMN ai_correction TEXT DEFAULT ''`,
-    `ALTER TABLE articles ADD COLUMN refined TEXT DEFAULT ''`,
-    `ALTER TABLE articles ADD COLUMN original_body TEXT DEFAULT ''`,
-    `ALTER TABLE review_cards ADD COLUMN variant TEXT DEFAULT ''`,
-    `ALTER TABLE review_cards ADD COLUMN kind TEXT NOT NULL DEFAULT 'recall'`,
-    `ALTER TABLE nuggets ADD COLUMN verify_by TEXT DEFAULT ''`,
-    `ALTER TABLE nuggets ADD COLUMN verify_date TEXT DEFAULT ''`,
-    `ALTER TABLE articles ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'official'`,
-  ]) {
-    try {
-      db.exec(ddl);
-    } catch {
-      /* 列已存在 */
-    }
-  }
+  /* 注意：幂等 ALTER 迁移必须放在所有 CREATE TABLE 之后（见函数末尾的 migrateColumns）。
+     放在建表之前会让全新库全部失败——列不存在于基础 DDL，之后任何写入都会报错。 */
   db.exec(`
     CREATE TABLE IF NOT EXISTS llm_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -281,6 +259,45 @@ function initSchema(db: DatabaseSync) {
       reviewed_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  /* 幂等列迁移 + 一次性数据修正。必须在所有建表语句之后执行：
+     基础 DDL 不含这些后加的列，全新库若先跑 ALTER 会整段失败（历史 bug，2026-10-23 修）。 */
+  for (const ddl of [
+    `ALTER TABLE nuggets ADD COLUMN origin TEXT NOT NULL DEFAULT 'auto'`,
+    `ALTER TABLE chain_steps ADD COLUMN nugget_id INTEGER`,
+    `ALTER TABLE chains ADD COLUMN current_view TEXT DEFAULT ''`,
+    `ALTER TABLE chains ADD COLUMN next_watch TEXT DEFAULT ''`,
+    `ALTER TABLE nuggets ADD COLUMN user_answer TEXT DEFAULT ''`,
+    `ALTER TABLE nuggets ADD COLUMN ai_correction TEXT DEFAULT ''`,
+    `ALTER TABLE articles ADD COLUMN refined TEXT DEFAULT ''`,
+    `ALTER TABLE articles ADD COLUMN original_body TEXT DEFAULT ''`,
+    `ALTER TABLE review_cards ADD COLUMN variant TEXT DEFAULT ''`,
+    `ALTER TABLE review_cards ADD COLUMN kind TEXT NOT NULL DEFAULT 'recall'`,
+    `ALTER TABLE nuggets ADD COLUMN verify_by TEXT DEFAULT ''`,
+    `ALTER TABLE nuggets ADD COLUMN verify_date TEXT DEFAULT ''`,
+    `ALTER TABLE articles ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'official'`,
+    // 蒸馏队列标记：原先散落在 distill/pipeline 的 ensureDistilledColumn()，收归到统一迁移
+    `ALTER TABLE items ADD COLUMN distilled INTEGER NOT NULL DEFAULT 0`,
+  ]) {
+    try {
+      db.exec(ddl);
+    } catch {
+      /* 列已存在 */
+    }
+  }
+  try {
+    // 失效信源归一：连接直接失败(000)的源停用，避免每次采集都计入失败、污染健康页
+    db.exec(`UPDATE sources SET enabled = 0 WHERE name IN ('华尔街日报·中文','澎湃新闻')`);
+  } catch {
+    /* 数据修正失败不影响启动 */
+  }
+  try {
+    // builder 用 INSERT OR IGNORE 追加环节，但缺唯一约束时 IGNORE 形同虚设：
+    // buildChains 每小时可能重跑，同一 (chain_id, seq) 会被重复插入
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_steps_unique ON chain_steps(chain_id, seq)`);
+  } catch {
+    /* 已有重复数据时建索引会失败，不阻塞启动；清理后下次启动自动生效 */
+  }
 }
 
 /** 简易内容指纹：标题去空白小写 + 截断，用于跨源去重 */

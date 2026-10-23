@@ -152,14 +152,6 @@ export default async function WatchPage({
                         {entityOf(it.title)!.name} 档案 →
                       </a>
                     )}
-                    {entityOf(it.title) && (
-                      <a
-                        href={`/entity/${entityOf(it.title)!.id}`}
-                        className="ml-2 inline-block rounded-full border border-zinc-200 px-2 py-0.5 text-[10.5px] text-zinc-500 hover:border-[#00b8d4] hover:text-[#007a8c] align-middle"
-                      >
-                        {entityOf(it.title)!.name} 档案 →
-                      </a>
-                    )}
                     <div className="mono mt-1 text-[11px] text-zinc-400 tabular-nums">
                       {(it.published_at ?? "").slice(0, 16)} · 巨潮 PDF
                     </div>

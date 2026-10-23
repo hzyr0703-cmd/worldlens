@@ -58,6 +58,23 @@ function allAtoms(): { id: number; type: string; statement: string }[] {
     .all() as unknown as { id: number; type: string; statement: string }[];
 }
 
+/**
+ * 简报成品校验：LLM 有时会返回 JSON 骨架、空泛声明或明显截断的半篇。
+ * 这类内容一旦入库就会顶掉当期简报并直接呈现在首页——宁可失败，不可污染。
+ */
+export function validateDigestBody(md: string): { ok: boolean; reason?: string } {
+  const t = md.trim();
+  if (t.length < 400) return { ok: false, reason: `内容过短 ${t.length} 字` };
+  if (/^```/.test(t)) return { ok: false, reason: "返回的是代码块/JSON 而非 markdown" };
+  if (/"今日主线"\s*:/.test(t)) return { ok: false, reason: "返回的是 JSON 对象而非 markdown" };
+  if (!/^##\s+今日主线/m.test(t)) return { ok: false, reason: "缺少「## 今日主线」章节" };
+  // 模型在材料缺失时会写这类元声明，说明它没拿到材料
+  if (/未接收到.{0,12}材料|无法(提取|进行|生成)/.test(t.slice(0, 600))) {
+    return { ok: false, reason: "模型声称未收到材料（输入为空或指令丢失）" };
+  }
+  return { ok: true };
+}
+
 export async function buildDigest(date?: string, opts?: { deep?: boolean }): Promise<{ date: string; content: string; model: string }> {
   const db = getDb();
   const d = date ?? new Date().toISOString().slice(0, 10);
@@ -158,9 +175,13 @@ C. 用户的认知原子库（用户长期保存、亲手沉淀的理解）
 
 纪律：只输出 markdown，不要客套；「对话」两节是简报的灵魂，「水面之下」是简报的锋利处——宁可少而真，不可多而凑；但真实的对照要写透（机制+影响），不要一句话带过。`;
 
+    // 材料只拼一次：主调用与降级调用必须用同一份材料，
+    // 否则降级时模型手里没有 A/B/C/D/E 任何一层，只能编造（2026-10-21 事故根因）
+    const material = `【A. 今日快讯】\n${corpus.slice(0, 9000)}\n\n【B. 同实体历史主张（近30天）】\n${histBlock.slice(0, 3500)}\n\n【C. 用户认知原子库】\n${atomBlock.slice(0, 2500)}\n\n【D. 今日 T0 公告（交易所公告库，最硬证据）】\n${announcements.length ? announcements.map((a) => `- ${a.content.slice(0, 18)} ${a.title}`).join("\n") : "（今日无公告）"}\n\n【E. 已注册的验证点（来自知识链条，务必沿用）】\n${verifyPoints.length ? verifyPoints.map((v) => `- [${v.verify_by} 到期] ${v.title}：${v.claim.slice(0, 80)}`).join("\n") : "（暂无）"}`;
+
     content = await chat(
       promptText,
-      `【A. 今日快讯】\n${corpus.slice(0, 9000)}\n\n【B. 同实体历史主张（近30天）】\n${histBlock.slice(0, 3500)}\n\n【C. 用户认知原子库】\n${atomBlock.slice(0, 2500)}\n\n【D. 今日 T0 公告（交易所公告库，最硬证据）】\n${announcements.length ? announcements.map((a) => `- ${a.content.slice(0, 18)} ${a.title}`).join("\n") : "（今日无公告）"}\n\n【E. 已注册的验证点（来自知识链条，务必沿用）】\n${verifyPoints.length ? verifyPoints.map((v) => `- [${v.verify_by} 到期] ${v.title}：${v.claim.slice(0, 80)}`).join("\n") : "（暂无）"}`,
+      material,
       {
         maxTokens: opts?.deep ? 20000 : 16000,
         temperature: 0.35,
@@ -174,7 +195,7 @@ C. 用户的认知原子库（用户长期保存、亲手沉淀的理解）
       // 4.7-flash 免费额度限流（1305）时自动降级到 glm-4.6（付费但稳定）
       if (opts?.deep && e instanceof Error && /1305|429|访问量过大/.test(e.message)) {
         console.warn("[digest] deep model rate-limited, falling back to glm-4.6");
-        return chat(promptText, "请按 JSON 格式输出。", {
+        return chat(promptText, material, {
           maxTokens: 16000,
           temperature: 0.35,
           purpose: "digest_deep_fallback",
@@ -183,6 +204,12 @@ C. 用户的认知原子库（用户长期保存、亲手沉淀的理解）
       }
       throw e;
     });
+    const check = validateDigestBody(content);
+    if (!check.ok) {
+      throw new Error(
+        `简报生成失败：模型返回内容未通过校验（${check.reason}）。已放弃本次写入，保留库中既有内容。`
+      );
+    }
     content = `# WorldLens 每日简报 · ${d}\n\n${content}`;
   } else {
     // 规则模板兜底

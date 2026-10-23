@@ -94,15 +94,6 @@ const LINK_SYSTEM = `你是认知连接器。输入：新蒸出的认知原子�
 
 输出格式：[{"src_idx":0,"dst_id":12,"relation":"supports","rationale":"..."}]`;
 
-/** items 表补充蒸馏标记列（老库迁移，幂等） */
-function ensureDistilledColumn(): void {
-  try {
-    getDb().prepare(`ALTER TABLE items ADD COLUMN distilled INTEGER NOT NULL DEFAULT 0`).run();
-  } catch {
-    /* 列已存在 */
-  }
-}
-
 type RawNugget = {
   type: string;
   statement: string;
@@ -178,7 +169,6 @@ export type DistillResult = {
 
 export async function distillDaily(date?: string, limit = 400): Promise<DistillResult> {
   if (!llmEnabled) throw new Error("LLM 未配置（.env 缺 LLM_BASE_URL/LLM_API_KEY）");
-  ensureDistilledColumn();
   const db = getDb();
   const d = date ?? new Date().toISOString().slice(0, 10);
   const result: DistillResult = { batches: 0, scanned: 0, skipped: 0, created: 0, links: 0, reinforced: 0, contradicted: 0 };

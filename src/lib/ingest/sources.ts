@@ -79,8 +79,8 @@ export const DISABLED_SOURCE_URLS = [
 
 // 用户关注域实体种子（可被 LLM 抽取结果自动扩充）
 export const SEED_ENTITIES: { name: string; type: string; aliases: string[] }[] = [
-  { name: "美联储", type: "macro", aliases: ["Fed", "FOMC", "联邦储备"] },
-  { name: "中国人民银行", type: "macro", aliases: ["央行", "央行", "MLF", "LPR", "逆回购"] },
+  { name: "美联储", type: "macro", aliases: ["Fed", "FOMC", "联邦储备", "Federal Reserve", "interest rate", "rate cut", "rate hike"] },
+  { name: "中国人民银行", type: "macro", aliases: ["央行", "MLF", "LPR", "逆回购", "PBOC"] },
   { name: "国家统计局", type: "macro", aliases: ["CPI", "PPI", "PMI", "GDP", "社融"] },
   { name: "中际旭创", type: "company", aliases: ["300308"] },
   { name: "新易盛", type: "company", aliases: ["300502"] },
@@ -90,8 +90,8 @@ export const SEED_ENTITIES: { name: string; type: string; aliases: string[] }[] 
   { name: "半导体", type: "concept", aliases: ["芯片", "晶圆", "先进制程", "存储"] },
   { name: "纳指100", type: "concept", aliases: ["纳斯达克", "NDX", "纳指"] },
   { name: "AI算力", type: "concept", aliases: ["算力", "GPU", "英伟达", "NVIDIA", "AI芯片"] },
-  // 英文实体（WSJ/arXiv 等海外源）
-  { name: "美联储", type: "macro", aliases: ["Federal Reserve", "interest rate", "rate cut", "rate hike", "FOMC"] },
+  // 英文实体（WSJ/arXiv 等海外源）；美联储的英文别名已并入上方同一条，
+  // 名字唯一约束下重复定义会让第二组别名被 ON CONFLICT DO NOTHING 静默丢弃
   { name: "AI", type: "concept", aliases: ["人工智能", "AIGC", "生成式AI", "大模型"] },
   { name: "台积电", type: "company", aliases: ["TSMC", "台积电股份"] },
   { name: "比特币", type: "concept", aliases: ["BTC", "BTC/USD"] },

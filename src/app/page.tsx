@@ -7,9 +7,7 @@ import DigestFold from "@/components/DigestFold";
 import DigestPending from "@/components/DigestPending";
 import FirstVisitGuide from "@/components/FirstVisitGuide";
 import DigestDeepButton from "@/components/DigestDeepButton";
-import { listChains } from "@/lib/chain/builder";
 import { ActionsBar } from "@/components/ActionsBar";
-import CountUp from "@/components/CountUp";
 import Hero from "@/components/Hero";
 import Reveal from "@/components/Reveal";
 

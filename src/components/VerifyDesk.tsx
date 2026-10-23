@@ -73,12 +73,20 @@ export default function VerifyDesk() {
 
   useEffect(() => {
     let alive = true;
-    fetchDesk().then((d) => {
-      if (alive) {
-        setData(d);
-        setLoading(false);
-      }
-    });
+    fetchDesk()
+      .then((d) => {
+        if (alive) {
+          setData(d);
+          setLoading(false);
+        }
+      })
+      .catch((e) => {
+        // 无 catch 时 Promise 拒绝会让 loading 永远停在骨架屏，用户看到的是"卡住"
+        if (alive) {
+          setError(e instanceof Error ? e.message : String(e));
+          setLoading(false);
+        }
+      });
     return () => {
       alive = false;
     };

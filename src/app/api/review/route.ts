@@ -6,8 +6,6 @@ import { dueVerifyCards, nextVerifyDue, retireStaleVerifyCards, settledVerifyCar
 export async function GET() {
   // 先把早就过期、已无从结算的老验证点归档，避免台面被历史噪音占满
   retireStaleVerifyCards(120);
-  // 先把早就过期、已无从结算的老验证点归档，避免台面被历史噪音占满
-  retireStaleVerifyCards(120);
   // 对账台：只发验证卡，且每张都带「所属链条 + 可查证据」
   const cards = dueVerifyCards();
   return NextResponse.json({

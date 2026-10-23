@@ -10,16 +10,27 @@ export default function TopicSub({ initial }: { initial: string[] }) {
   const [input, setInput] = useState("");
   const [kw, setKw] = useState<string[]>(initial);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
 
-  async function persist(next: string[]) {
+  /** 乐观更新失败要回滚：否则服务端没存下，刷新后关键词"复活"或消失，用户以为见鬼 */
+  async function persist(next: string[], prev: string[]) {
     setBusy(true);
-    await wlFetch("/api/prefs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: "topic_keywords", value: next }),
-    });
-    setBusy(false);
-    router.refresh();
+    setErr("");
+    try {
+      const res = await wlFetch("/api/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "topic_keywords", value: next }),
+      });
+      const d = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!res.ok || !d?.ok) throw new Error(d?.error ?? `保存失败（HTTP ${res.status}）`);
+      router.refresh();
+    } catch (e) {
+      setKw(prev);
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -36,7 +47,7 @@ export default function TopicSub({ initial }: { initial: string[] }) {
             onClick={() => {
               const next = kw.filter((x) => x !== k);
               setKw(next);
-              persist(next);
+              void persist(next, kw);
             }}
             className="pill pill-active !text-[12.5px] cursor-pointer"
             title="点击移除"
@@ -50,9 +61,10 @@ export default function TopicSub({ initial }: { initial: string[] }) {
             const v = input.trim();
             if (!v || kw.includes(v)) return;
             const next = [...kw, v];
+            const prev = kw;
             setKw(next);
             setInput("");
-            persist(next);
+            void persist(next, prev);
           }}
           className="flex items-center gap-2"
         >
@@ -67,6 +79,7 @@ export default function TopicSub({ initial }: { initial: string[] }) {
           </button>
         </form>
       </div>
+      {err && <p className="mt-3 text-[11.5px] text-[#b4232f] leading-relaxed">{err}</p>}
     </div>
   );
 }
