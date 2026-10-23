@@ -116,37 +116,27 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   return inter / (a.size + b.size - inter || 1);
 }
 
-/** 库内 FTS 粗筛 top3 → bigram Jaccard ≥ 0.55 判为重复 */
+/** 库内 LIKE 粗筛 top3 → bigram Jaccard ≥ 0.55 判为重复（fts5 已弃用，见 db.ts） */
 function findDuplicate(statement: string): { id: number } | null {
   const db = getDb();
-  
+
   const terms = searchTerms(statement, 8);
   if (terms.length === 0) return null;
-  // trigram 分词器只能 MATCH ≥3 字符；2 字词（"利率""光模块"）走 LIKE 兜底，两路合并
-  const longTerms = terms.filter((t) => t.length >= 3);
-  const shortTerms = terms.filter((t) => t.length < 3);
   const seen = new Set<number>();
   const candidates: { id: number; statement: string }[] = [];
   try {
-    if (longTerms.length) {
-      const match = longTerms.map((t) => `"${t}"`).join(" OR ");
-      const rows = db
-        .prepare(
-          `SELECT n.id, n.statement FROM nuggets n
-           JOIN nuggets_fts f ON n.id = f.rowid
-           WHERE nuggets_fts MATCH ?
-           ORDER BY rank LIMIT 4`
-        )
-        .all(match) as unknown as { id: number; statement: string }[];
-      for (const r of rows) if (!seen.has(r.id)) { seen.add(r.id); candidates.push(r); }
-    }
-    if (shortTerms.length && candidates.length < 4) {
-      const like = shortTerms.map(() => `statement LIKE ?`).join(" OR ");
-      const rows = db
-        .prepare(`SELECT id, statement FROM nuggets WHERE (${like}) LIMIT 4`)
-        .all(...shortTerms.map((t) => `%${t}%`)) as unknown as { id: number; statement: string }[];
-      for (const r of rows) if (!seen.has(r.id)) { seen.add(r.id); candidates.push(r); }
-    }
+    // 全部走 LIKE：terms 是从 statement 里抽出的关键词，命中即候选，
+    // 精确判断交给后面的 bigram Jaccard
+    const like = terms.map(() => `(statement LIKE ? OR elaboration LIKE ?)`).join(" OR ");
+    const args = terms.flatMap((t) => [`%${t}%`, `%${t}%`]);
+    const rows = db
+      .prepare(
+        `SELECT id, statement FROM nuggets
+         WHERE status != 'retired' AND (${like})
+         ORDER BY confidence DESC LIMIT 6`
+      )
+      .all(...args) as unknown as { id: number; statement: string }[];
+    for (const r of rows) if (!seen.has(r.id)) { seen.add(r.id); candidates.push(r); }
   } catch {
     return null;
   }

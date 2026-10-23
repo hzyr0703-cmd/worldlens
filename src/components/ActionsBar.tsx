@@ -19,17 +19,13 @@ export function ActionsBar() {
       const res = await wlFetch(`/api/${kind}`, { method: "POST" });
       const data = await res.json();
       if (!res.ok || data.ok === false) throw new Error(data.error ?? `HTTP ${res.status}`);
-      if (kind === "ingest") {
-        const ok = (data.ingest ?? []).filter((x: { error?: string }) => !x.error).length;
-        setMsg(`采集完成：${ok} 源成功`);
-      } else if (kind === "supply") {
-        setMsg(`供给完成：新增 ${data.added} 篇深度文章`);
-      } else if (kind === "digest") {
-        setMsg("今日简报已生成");
+      if (kind === "digest") {
+        // 简报仍是同步生成（快，且有缓存直接返回）
+        setMsg(data.cached ? "今日简报已存在，直接取用（要重写请用「深度简报」）" : "今日简报已生成");
       } else {
-        setMsg(
-          `蒸馏完成：扫描 ${data.scanned} 条 → 新原子 ${data.created} · 连边 ${data.links} · 印证 ${data.reinforced} · 矛盾 ${data.contradicted}`
-        );
+        // 采集/供给/蒸馏都是后台任务：POST 立即返回，约 1 分钟后自动刷新看结果
+        setMsg(data.message ?? "已启动");
+        setTimeout(() => startTransition(() => router.refresh()), 60000);
       }
       startTransition(() => router.refresh());
     } catch (e) {

@@ -105,12 +105,10 @@ function initSchema(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_items_published ON items(published_at DESC);
     CREATE INDEX IF NOT EXISTS idx_items_source ON items(source_id);
 
-    CREATE VIRTUAL TABLE IF NOT EXISTS items_fts USING fts5(
-      title, content, content='items', content_rowid='id', tokenize='unicode61'
-    );
-    CREATE TRIGGER IF NOT EXISTS items_ai AFTER INSERT ON items BEGIN
-      INSERT INTO items_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
-    END;
+    /* 全文检索不再用 fts5：线上沙箱的 node:sqlite 没编 fts5 模块（实测
+       "no such module: fts5"），INSERT 触发器写虚拟表直接失败 → 采集入库全断
+       （cron_log 连续多日「采集 470+/入0」就是这个）。现全部走 LIKE 查基表，
+       444 原子 / 6396 条快讯的量级没有性能问题，也不再依赖任何编译扩展。 */
 
     CREATE TABLE IF NOT EXISTS entities (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -167,33 +165,6 @@ function initSchema(db: DatabaseSync) {
     );
     CREATE INDEX IF NOT EXISTS idx_nuggets_date ON nuggets(distill_date DESC);
     CREATE INDEX IF NOT EXISTS idx_nuggets_type ON nuggets(type);
-
-    CREATE VIRTUAL TABLE IF NOT EXISTS nuggets_fts USING fts5(
-      statement, elaboration, content='nuggets', content_rowid='id', tokenize='trigram'
-    );
-  `);
-
-  /* 旧库迁移：unicode61 对中文无效（整句一个 token，搜索永远 0 命中）。
-     检测到旧分词器就重建为 trigram 并回填，一次性开销。 */
-  {
-    const ftsSql = db
-      .prepare(`SELECT sql FROM sqlite_master WHERE name = 'nuggets_fts'`)
-      .get() as { sql: string } | undefined;
-    if (ftsSql?.sql && !ftsSql.sql.includes("trigram")) {
-      db.exec(`DROP TABLE IF EXISTS nuggets_fts`);
-      db.exec(`CREATE VIRTUAL TABLE nuggets_fts USING fts5(
-        statement, elaboration, content='nuggets', content_rowid='id', tokenize='trigram'
-      )`);
-      db.exec(`INSERT INTO nuggets_fts(rowid, statement, elaboration)
-               SELECT id, statement, elaboration FROM nuggets`);
-    }
-  }
-
-  db.exec(`
-    CREATE TRIGGER IF NOT EXISTS nuggets_ai AFTER INSERT ON nuggets BEGIN
-      INSERT INTO nuggets_fts(rowid, statement, elaboration)
-      VALUES (new.id, new.statement, new.elaboration);
-    END;
 
     CREATE TABLE IF NOT EXISTS nugget_links (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -259,6 +230,24 @@ function initSchema(db: DatabaseSync) {
       reviewed_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  /* 旧库清理：把 fts5 虚拟表和挂在 items/nuggets 上的同步触发器拆掉。
+     触发器先删（不依赖模块）；DROP 虚拟表可能同样报 no such module，各自兜住，
+     失败也只是留下一个没人再写的旧表，不影响任何功能。 */
+  for (const t of ["items_ai", "nuggets_ai"]) {
+    try {
+      db.exec(`DROP TRIGGER IF EXISTS ${t}`);
+    } catch {
+      /* ignore */
+    }
+  }
+  for (const t of ["items_fts", "nuggets_fts"]) {
+    try {
+      db.exec(`DROP TABLE IF EXISTS ${t}`);
+    } catch (e) {
+      console.warn(`[db] drop legacy ${t} failed (harmless):`, e instanceof Error ? e.message : e);
+    }
+  }
 
   /* 幂等列迁移 + 一次性数据修正。必须在所有建表语句之后执行：
      基础 DDL 不含这些后加的列，全新库若先跑 ALTER 会整段失败（历史 bug，2026-10-23 修）。 */

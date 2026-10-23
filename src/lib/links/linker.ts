@@ -53,30 +53,21 @@ export async function linkNewAtoms(
       .get(nid) as unknown as { id: number; type: string; statement: string; elaboration: string } | undefined;
     if (!nugget) continue;
 
-    // FTS 粗筛库内相关旧原子（trigram：≥3 字词），2 字词 LIKE 兜底
+    // LIKE 粗筛库内相关旧原子（fts5 已弃用，见 db.ts），精确判断交给 LLM
     const terms = searchTerms(nugget.statement, 10);
-    const longTerms = terms.filter((t) => t.length >= 3);
-    const shortTerms = terms.filter((t) => t.length < 3);
     const seen = new Set<number>([nid]);
     const candidates: { id: number; statement: string }[] = [];
 
     try {
-      if (longTerms.length) {
+      if (terms.length) {
+        const like = terms.map(() => `(statement LIKE ? OR elaboration LIKE ?)`).join(" OR ");
         const rows = db
           .prepare(
-            `SELECT n.id, n.statement FROM nuggets n
-             JOIN nuggets_fts f ON n.id = f.rowid
-             WHERE nuggets_fts MATCH ? AND n.id != ? AND n.status != 'retired'
-             ORDER BY rank LIMIT 12`
+            `SELECT id, statement FROM nuggets
+             WHERE id != ? AND status != 'retired' AND (${like})
+             ORDER BY confidence DESC LIMIT 12`
           )
-          .all(longTerms.map((t) => `"${t}"`).join(" OR "), nid) as unknown as { id: number; statement: string }[];
-        for (const r of rows) if (!seen.has(r.id)) { seen.add(r.id); candidates.push(r); }
-      }
-      if (shortTerms.length && candidates.length < 6) {
-        const like = shortTerms.map(() => `statement LIKE ?`).join(" OR ");
-        const rows = db
-          .prepare(`SELECT id, statement FROM nuggets WHERE id != ? AND status != 'retired' AND (${like}) LIMIT 6`)
-          .all(nid, ...shortTerms.map((t) => `%${t}%`)) as unknown as { id: number; statement: string }[];
+          .all(nid, ...terms.flatMap((t) => [`%${t}%`, `%${t}%`])) as unknown as { id: number; statement: string }[];
         for (const r of rows) if (!seen.has(r.id)) { seen.add(r.id); candidates.push(r); }
       }
     } catch {
@@ -159,26 +150,18 @@ export async function linkNewAtomsBatch(
         | undefined;
       if (!nugget) continue;
       const terms = searchTerms(nugget.statement, 10);
-      const longTerms = terms.filter((x) => x.length >= 3);
-      const shortTerms = terms.filter((x) => x.length < 3);
       const seen = new Set<number>([nid]);
       const candidates: { id: number; statement: string }[] = [];
       try {
-        if (longTerms.length) {
+        if (terms.length) {
+          const like = terms.map(() => `(statement LIKE ? OR elaboration LIKE ?)`).join(" OR ");
           const rows = db
             .prepare(
-              `SELECT n.id, n.statement FROM nuggets n JOIN nuggets_fts f ON n.id = f.rowid
-               WHERE nuggets_fts MATCH ? AND n.id != ? AND n.status != 'retired'
-               ORDER BY rank LIMIT 8`
+              `SELECT id, statement FROM nuggets
+               WHERE id != ? AND status != 'retired' AND (${like})
+               ORDER BY confidence DESC LIMIT 8`
             )
-            .all(longTerms.map((x) => `"${x}"`).join(" OR "), nid) as unknown as { id: number; statement: string }[];
-          for (const r of rows) if (!seen.has(r.id)) { seen.add(r.id); candidates.push(r); }
-        }
-        if (shortTerms.length && candidates.length < 5) {
-          const like = shortTerms.map(() => `statement LIKE ?`).join(" OR ");
-          const rows = db
-            .prepare(`SELECT id, statement FROM nuggets WHERE id != ? AND status != 'retired' AND (${like}) LIMIT 5`)
-            .all(nid, ...shortTerms.map((x) => `%${x}%`)) as unknown as { id: number; statement: string }[];
+            .all(nid, ...terms.flatMap((x) => [`%${x}%`, `%${x}%`])) as unknown as { id: number; statement: string }[];
           for (const r of rows) if (!seen.has(r.id)) { seen.add(r.id); candidates.push(r); }
         }
       } catch {

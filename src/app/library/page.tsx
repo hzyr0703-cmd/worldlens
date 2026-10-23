@@ -43,43 +43,20 @@ export default async function LibraryPage({
   /** 当前筛选条件下的命中总数（分页用）——搜索走内存合并，其余按 SQL 分页 */
   let filteredTotal = 0;
   if (q?.trim()) {
-    // 分词后分组检索：trigram 分词器只能 MATCH ≥3 字符的词，
-    // 中文常用词多是 2 字（"经济""利率"），短词走 LIKE 兜底，两路合并去重。
+    // LIKE 检索（fts5 已弃用，见 db.ts）：分词后逐词匹配 statement/elaboration
     const terms = q.trim().replace(/[，。、：；！？\s]/g, " ").split(" ").filter((w) => w.length >= 1).slice(0, 6);
-    const longTerms = terms.filter((t) => t.length >= 3);
-    const shortTerms = terms.filter((t) => t.length < 3);
-    const seen = new Set<number>();
     const merged: Nugget[] = [];
 
-    if (longTerms.length) {
-      // 引号需转义成双引号，否则含 " / 反斜杠的查询会让 FTS5 编译失败直接 500
-      const match = longTerms.map((t) => `"${t.replace(/"/g, '""')}"`).join(" OR ");
-      try {
-        const ftsRows = db
-          .prepare(
-            `SELECT n.* FROM nuggets n JOIN nuggets_fts f ON n.id = f.rowid
-             WHERE nuggets_fts MATCH ? AND n.status != 'retired' ORDER BY rank LIMIT 60`
-          )
-          .all(match) as unknown as Nugget[];
-        for (const r of ftsRows) {
-          if (!seen.has(r.id)) { seen.add(r.id); merged.push(r); }
-        }
-      } catch {
-        /* 查询语法异常时退化为纯 LIKE 结果，不让整页 500 */
-      }
-    }
-    if (shortTerms.length && merged.length < 60) {
-      const like = shortTerms.map(() => `(statement LIKE ? OR elaboration LIKE ?)`).join(" OR ");
-      const args = shortTerms.flatMap((t) => [`%${t}%`, `%${t}%`]);
-      const likeRows = db
+    if (terms.length) {
+      const like = terms.map(() => `(statement LIKE ? OR elaboration LIKE ?)`).join(" OR ");
+      const args = terms.flatMap((t) => [`%${t}%`, `%${t}%`]);
+      const rows = db
         .prepare(
           `SELECT * FROM nuggets WHERE status != 'retired' AND (${like})
            ORDER BY distill_date DESC, confidence DESC LIMIT 60`
         )
         .all(...args) as unknown as Nugget[];
-      for (const r of likeRows) {
-        if (!seen.has(r.id)) { seen.add(r.id); merged.push(r); }
-      }
+      merged.push(...rows);
     }
     all = merged;
     filteredTotal = merged.length; // 搜索结果一次性给全，不再分页

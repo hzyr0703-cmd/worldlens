@@ -67,7 +67,9 @@ export function validateDigestBody(md: string): { ok: boolean; reason?: string }
   if (t.length < 400) return { ok: false, reason: `内容过短 ${t.length} 字` };
   if (/^```/.test(t)) return { ok: false, reason: "返回的是代码块/JSON 而非 markdown" };
   if (/"今日主线"\s*:/.test(t)) return { ok: false, reason: "返回的是 JSON 对象而非 markdown" };
-  if (!/^##\s+今日主线/m.test(t)) return { ok: false, reason: "缺少「## 今日主线」章节" };
+  // 只要求出现这一节，不强制 `##` 前缀——模型偶尔写成 `**今日主线**`，
+  // 内容本身可读，不该因为两个井号判死
+  if (!/今日主线/.test(t)) return { ok: false, reason: "缺少「今日主线」章节" };
   // 模型在材料缺失时会写这类元声明，说明它没拿到材料
   if (/未接收到.{0,12}材料|无法(提取|进行|生成)/.test(t.slice(0, 600))) {
     return { ok: false, reason: "模型声称未收到材料（输入为空或指令丢失）" };
