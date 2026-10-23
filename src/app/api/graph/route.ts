@@ -30,9 +30,10 @@ const SAME_PAIRS: [string, string][] = [
   ["纳斯达克", "纳指100"],
 ];
 
-/** 每个节点保留的最强边数——K 越大越密，4 是 60 节点下的可读上限 */
+/** 每个节点保留的最强边数——K 越大越密，4 是 32 节点下的可读上限 */
 const EDGES_PER_NODE = 4;
-const MAX_NODES = 60;
+/** 图上最多放多少实体：60 个会挤成一团（标签互相压），24 个才看得出结构 */
+const MAX_NODES = 24;
 
 export async function GET(req: NextRequest) {
   const db = getDb();
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
          FROM nuggets n
          WHERE n.status != 'retired'
            AND n.id IN (SELECT src_id FROM nugget_links UNION SELECT dst_id FROM nugget_links)
-         ORDER BY degree DESC, n.confidence DESC LIMIT 80`
+         ORDER BY degree DESC, n.confidence DESC LIMIT 48`
       )
       .all() as unknown as {
       id: number; type: string; statement: string; confidence: number; domain: string; status: string; degree: number;
@@ -66,7 +67,14 @@ export async function GET(req: NextRequest) {
         .all() as unknown as { src_id: number; dst_id: number; relation: string; rationale: string }[]
     ).filter((e) => ids.has(e.src_id) && ids.has(e.dst_id));
 
-    return NextResponse.json({ mode, nodes, edges });
+    // 节点按"在最终边集里的度数"取，选完还要删掉一条边都连不上的——
+    // 它们名义上有度数（连到了排名之外的原子），落在图上就是几个孤零零的球
+    const connected = new Set<number>();
+    for (const e of edges) {
+      connected.add(e.src_id);
+      connected.add(e.dst_id);
+    }
+    return NextResponse.json({ mode, nodes: nodes.filter((n) => connected.has(n.id)), edges });
   }
 
   // ── 实体共现 ──────────────────────────────────────────────────────────────

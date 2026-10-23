@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 /* 数据类型                                                            */
 /* ------------------------------------------------------------------ */
 
-type EntityNode = { id: number; name: string; type: string; weight: number; degree?: number };
+type EntityNode = { id: number; name: string; type: string; weight: number; degree?: number; r?: number };
 type EntityEdge = {
   src_id: number;
   dst_id: number;
@@ -24,6 +24,7 @@ type AtomNode = {
   domain: string;
   status: string;
   degree: number;
+  r?: number;
 };
 type AtomEdge = { src_id: number; dst_id: number; relation: string; rationale: string };
 
@@ -31,12 +32,12 @@ type Mode = "entities" | "atoms";
 
 /**
  * 原子节点标签：statement.slice(0,7) 得到的是「2026年9月」「黄金市场中，E」这类残句。
- * 优先取第一个分句（读到逗号/句号/冒号为止），长度不足再顺延，最多 16 字。
+ * 优先取第一个分句（读到逗号/句号/冒号为止），最长 12 字——再长会压到邻居的标签。
  */
 function atomLabel(s: string): string {
   const head = s.split(/[，。；：、,;:]/)[0].trim();
-  if (head.length >= 4 && head.length <= 16) return head;
-  return s.slice(0, 16);
+  if (head.length >= 4 && head.length <= 12) return head;
+  return s.slice(0, 12);
 }
 
 /* ------------------------------------------------------------------ */
@@ -102,7 +103,7 @@ type Pos = { x: number; y: number; vx: number; vy: number; pinned?: boolean };
 
 function useForceLayout(
   svgRef: React.RefObject<SVGSVGElement | null>,
-  nodes: { id: number }[],
+  nodes: { id: number; r?: number }[],
   edges: { src_id: number; dst_id: number; strength: number }[],
   active: boolean
 ) {
@@ -113,13 +114,15 @@ function useForceLayout(
 
   useEffect(() => {
     if (!active || nodes.length === 0) return;
-    const W = 900;
-    const H = 620;
+    const W = 1200;
+    const H = 800;
     const pos = posRef.current;
     pos.clear();
+    // 碰撞半径：圆点不能叠在一起，标签也要留出位置
+    const radiusOf = new Map(nodes.map((n) => [n.id, n.r ?? 20]));
     nodes.forEach((n, i) => {
       const a = (i / nodes.length) * Math.PI * 2;
-      const r = 240 + (i % 3) * 34;
+      const r = 340 + (i % 3) * 46;
       pos.set(n.id, {
         x: W / 2 + Math.cos(a) * r,
         y: H / 2 + Math.sin(a) * r * 0.82,
@@ -145,12 +148,23 @@ function useForceLayout(
             dy = Math.random();
             d2 = 1;
           }
-          const f = (2600 * alpha) / d2;
+          const f = (5200 * alpha) / d2;
           const d = Math.sqrt(d2);
           a.vx -= (dx / d) * f;
           a.vy -= (dy / d) * f;
           b.vx += (dx / d) * f;
           b.vy += (dy / d) * f;
+          // 碰撞分离：斥力按 d² 衰减，两个节点的圆已经开始重叠时反而推不开，
+          // 必须按实际半径硬撑开——否则会出现「AI / AI算力」叠成一个疙瘩。
+          // +44 是留给标签的：7 个字约 80px 宽，只按圆半径撑开会标签压标签。
+          const minD = (radiusOf.get(arr[i][0]) ?? 20) + (radiusOf.get(arr[j][0]) ?? 20) + 44;
+          if (d < minD) {
+            const push = (minD - d) * 0.6;
+            a.vx -= (dx / d) * push;
+            a.vy -= (dy / d) * push;
+            b.vx += (dx / d) * push;
+            b.vy += (dy / d) * push;
+          }
         }
       }
       for (const e of edges) {
@@ -160,7 +174,7 @@ function useForceLayout(
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         const d = Math.sqrt(dx * dx + dy * dy) || 1;
-        const rest = 120;
+        const rest = 170;
         const f = ((d - rest) * 0.022 * alpha * Math.min(3, e.strength)) / 1;
         a.vx += (dx / d) * f;
         a.vy += (dy / d) * f;
@@ -174,14 +188,15 @@ function useForceLayout(
           p.vy = 0;
           continue;
         }
-        p.vx += (W / 2 - p.x) * 0.0032 * alpha;
-        p.vy += (H / 2 - p.y) * 0.0032 * alpha;
+        p.vx += (W / 2 - p.x) * 0.0024 * alpha;
+        p.vy += (H / 2 - p.y) * 0.0024 * alpha;
         p.x += Math.max(-12, Math.min(12, p.vx));
         p.y += Math.max(-12, Math.min(12, p.vy));
         p.vx *= 0.82;
         p.vy *= 0.82;
-        p.x = Math.max(44, Math.min(W - 44, p.x));
-        p.y = Math.max(30, Math.min(H - 30, p.y));
+        p.x = Math.max(76, Math.min(W - 76, p.x));
+        // 上方多留一点：标签画在圆的正上方
+        p.y = Math.max(78, Math.min(H - 60, p.y));
       }
       alpha *= 0.985;
       frame++;
@@ -280,7 +295,11 @@ export default function GraphCanvas() {
   }, []);
 
   /* ---- 实体层 ---- */
-  const entityNodes = useMemo(() => entityData?.nodes ?? [], [entityData]);
+  // 半径在这里算好传给布局：碰撞检测需要知道每个圆多大，否则圆会叠在一起
+  const entityNodes = useMemo(
+    () => (entityData?.nodes ?? []).map((n) => ({ ...n, r: 11 + Math.min(12, Math.sqrt(n.weight) * 2.2) })),
+    [entityData]
+  );
   const entityEdges = useMemo(
     () => (entityData?.edges ?? []).map((e) => ({ src_id: e.src_id, dst_id: e.dst_id, strength: e.weight })),
     [entityData]
@@ -288,7 +307,10 @@ export default function GraphCanvas() {
   const entityLayout = useForceLayout(svgRef, entityNodes, entityEdges, mode === "entities");
 
   /* ---- 聚焦：选中实体的邻居（按共现强度排序，带证据）---- */
-  const entityMap = useMemo(() => new Map(entityNodes.map((n) => [n.id, n])), [entityNodes]);
+  const entityMap = useMemo(
+    () => new Map<number, EntityNode>(entityNodes.map((n) => [n.id, n])),
+    [entityNodes]
+  );
   const focusEntity = focusId === null ? null : entityMap.get(focusId) ?? null;
   const focusNeighbors = useMemo(() => {
     if (focusId === null) return [];
@@ -304,7 +326,10 @@ export default function GraphCanvas() {
   const neighborSet = useMemo(() => new Set(focusNeighbors.map((x) => x.other.id)), [focusNeighbors]);
 
   /* ---- 原子层 ---- */
-  const atomNodes = useMemo(() => atomData?.nodes ?? [], [atomData]);
+  const atomNodes = useMemo(
+    () => (atomData?.nodes ?? []).map((n) => ({ ...n, r: 12 + n.confidence * 11 })),
+    [atomData]
+  );
   const atomEdges = useMemo(
     () => (atomData?.edges ?? []).map((e) => ({ src_id: e.src_id, dst_id: e.dst_id, strength: 1 })),
     [atomData]
@@ -446,7 +471,7 @@ export default function GraphCanvas() {
         <div className="relative">
           <svg
             ref={svgRef}
-            viewBox="0 0 900 620"
+            viewBox="0 0 1200 800"
             preserveAspectRatio="xMidYMid meet"
             className="w-full max-h-[70vh] rounded-2xl border border-zinc-200 bg-[#fcfcfd]"
           >
@@ -463,9 +488,10 @@ export default function GraphCanvas() {
                     data-src={e.src_id}
                     data-dst={e.dst_id}
                     x1="0" y1="0" x2="0" y2="0"
-                    stroke={related && focusId !== null ? "#8a8f96" : "#c2c2c8"}
-                    strokeWidth={0.6 + (j / maxJ) * 2.6 + (related && focusId !== null ? 0.9 : 0)}
-                    strokeOpacity={related ? 0.28 + (j / maxJ) * 0.5 : 0.05}
+                    stroke={related && focusId !== null ? "#6f7480" : "#a8a8b0"}
+                    // 用 sqrt 归一：弱边也至少 1.9px，否则整张图看起来只有散点、没有网络
+                    strokeWidth={1.3 + Math.sqrt(j / maxJ) * 2.4 + (related && focusId !== null ? 0.9 : 0)}
+                    strokeOpacity={related ? 0.5 + Math.sqrt(j / maxJ) * 0.4 : 0.06}
                   />
                 );
               })}
@@ -504,23 +530,23 @@ export default function GraphCanvas() {
                   style={{ cursor: pinnedIds.has(n.id) ? "grabbing" : "pointer" }}
                 >
                   <circle
-                    r={(6 + Math.min(10, Math.sqrt(n.weight) * 2.5)) * 1.15}
+                    r={n.r ?? 20}
                     fill={ENTITY_FILL[n.type] ?? ENTITY_FILL_FALLBACK}
                     fillOpacity={dimmed ? 0.12 : 0.88}
                     stroke={pinnedIds.has(n.id) ? "#d9a441" : isFocus ? "#0a0a0b" : "#fff"}
-                    strokeWidth={pinnedIds.has(n.id) || isFocus ? 2.2 : 1.2}
+                    strokeWidth={pinnedIds.has(n.id) || isFocus ? 2.6 : 1.4}
                   />
                   <text
-                    y={-12}
+                    y={-((n.r ?? 20) + 6)}
                     textAnchor="middle"
-                    fontSize={10.5}
+                    fontSize={11.5}
                     fill={dimmed ? "#c9c9ce" : "#3f3f46"}
                     fontWeight={isFocus ? 700 : 500}
                     stroke="#fcfcfd"
-                    strokeWidth={2.6}
+                    strokeWidth={3}
                     paintOrder="stroke"
                   >
-                    {n.name.slice(0, 10)}
+                    {n.name.slice(0, 7)}
                   </text>
                 </g>
                 );
@@ -540,7 +566,7 @@ export default function GraphCanvas() {
                   style={{ cursor: pinnedIds.has(n.id) ? "grabbing" : "pointer" }}
                 >
                   <circle
-                    r={(8 + n.confidence * 10) * 1.15}
+                    r={n.r ?? 20}
                     fill={ATOM_FILL[n.type] ?? "#6b7280"}
                     fillOpacity={selectedAtom?.id === n.id ? 1 : 0.85}
                     stroke={
@@ -550,16 +576,16 @@ export default function GraphCanvas() {
                           ? "#0a0a0b"
                           : "#fff"
                     }
-                    strokeWidth={selectedAtom?.id === n.id || pinnedIds.has(n.id) ? 2.2 : 1.2}
+                    strokeWidth={selectedAtom?.id === n.id || pinnedIds.has(n.id) ? 2.6 : 1.4}
                   />
                   <text
-                    y={-16}
+                    y={-((n.r ?? 20) + 7)}
                     textAnchor="middle"
-                    fontSize={10}
+                    fontSize={11}
                     fill="#3f3f46"
                     fontWeight={500}
                     stroke="#fcfcfd"
-                    strokeWidth={2.6}
+                    strokeWidth={3}
                     paintOrder="stroke"
                   >
                     {atomLabel(n.statement)}
@@ -721,7 +747,7 @@ export default function GraphCanvas() {
                   边越粗＝重叠度越高（两者越"总在同一类事件里出现"）
                 </span>
                 <span className="text-zinc-400">
-                  已滤掉媒体名与泛词，每个实体只留最强 4 条边（重叠度 ≥5%）
+                  只画关联最强的 24 个实体 · 每个留最强 4 条边 · 重叠度 &lt;5% 不画
                 </span>
               </>
             ) : (
