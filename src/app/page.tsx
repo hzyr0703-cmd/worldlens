@@ -2,7 +2,6 @@ import { getDb } from "@/lib/db";
 import { getLiveTiles } from "@/lib/tiles";
 import { llmStatsToday } from "@/lib/extract/llm";
 import { pendingCount, pendingVerifyCount } from "@/lib/review/fsrs";
-import { detectConflicts } from "@/lib/radar/detect";
 import { renderMarkdown } from "@/lib/md";
 import DigestFold from "@/components/DigestFold";
 import DigestPending from "@/components/DigestPending";
@@ -84,7 +83,6 @@ export default function Home() {
     )
     .get() as unknown as { chains: number; steps: number; verify_due: number };
 
-  const conflicts = detectConflicts(7, 6);
   // 今日链条动态：今日有新增环节的链条 + 断裂链
   const chainStats = db
     .prepare(
@@ -257,48 +255,10 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ═══ 02 · 冲突雷达 —— 同一实体，多空对撞 ═══ */}
-      {conflicts.length > 0 && (
-        <section className="mt-20 sm:mt-28">
-          <SectionHead
-            index="02"
-            kicker="Conflict Radar"
-            title="同一件事，相反的说法"
-          />
-          <div className="stagger grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {conflicts.map((c) => (
-              <div key={c.entity_id} className="panel card-in p-6">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <span className="text-[14px] font-semibold text-zinc-900">{c.entity}</span>
-                  <span className="mono text-[10px] text-zinc-400">{c.type}</span>
-                  <span className="ml-auto text-[11px] tracking-[0.14em] uppercase text-[#d92b3c] font-semibold">
-                    冲突雷达
-                  </span>
-                </div>
-                <div className="mt-4 space-y-2.5">
-                  <div className="rounded-xl bg-[#ecfaf3] border border-[#cdeede] px-4 py-3">
-                    <span className="text-[10.5px] font-bold text-[#046c4e] tracking-wider">▲ 看多 · T{c.bull_tier}</span>
-                    <p className="text-[13.5px] text-zinc-700 leading-relaxed mt-1">{c.bull_text}</p>
-                  </div>
-                  <div className="rounded-xl bg-[#fceef0] border border-[#f6d5d9] px-4 py-3">
-                    <span className="text-[10.5px] font-bold text-[#b4232f] tracking-wider">▼ 看空 · T{c.bear_tier}</span>
-                    <p className="text-[13.5px] text-zinc-700 leading-relaxed mt-1">{c.bear_text}</p>
-                  </div>
-                </div>
-                <p className="text-[12px] text-zinc-400 mt-3.5 mono">
-                  两面都进脑子——冲突本身就是信息。
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-
-      {/* ═══ 03 · 今日待办 —— 只有真有事才出现 ═══ */}
+      {/* ═══ 02 · 今日待办 —— 只有真有事才出现 ═══ */}
       {(due > 0 || pendingArticles > 0) && (
         <section className="mt-20 sm:mt-28">
-          <SectionHead index="03" kicker="Today" title="今天要做的" />
+          <SectionHead index="02" kicker="Today" title="今天要做的" />
           <div className="stagger grid grid-cols-1 sm:grid-cols-2 gap-4">
             {due > 0 && (
               <a href="/review" className="neon-card card-in block rounded-2xl px-6 py-5">
@@ -330,7 +290,7 @@ export default function Home() {
       <section>
         <Reveal>
           <SectionHead
-            index="04"
+            index="03"
             kicker="Nuggets"
             title="最近沉淀的认知原子"
             href="/library"

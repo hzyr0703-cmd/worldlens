@@ -21,6 +21,7 @@ const ACTION_META: Record<string, { cn: string; cls: string }> = {
   reinforced: { cn: "印证 ↑", cls: "tier-1" },
   revised: { cn: "修正", cls: "tier-0" },
   challenged: { cn: "受挑战 ⚡", cls: "tier-0" },
+  archived: { cn: "归档", cls: "tier-3" },
 };
 
 export default function LogPage() {
@@ -45,23 +46,6 @@ export default function LogPage() {
         desc="何物 · 何时 · 因何被印证、修正或推翻。这是认知复利唯一可审计的痕迹。"
         aside={<span className="pill">{logs.length} 条记录</span>}
       />
-
-      {/* 引擎自动运行记录 */}
-      {cronRuns.length > 0 && (
-        <div className="panel p-6 mb-10">
-          <div className="sec-index mono mb-3">引擎自动运行 · 每日 08:00</div>
-          <div className="space-y-2">
-            {cronRuns.map((r, i) => (
-              <div key={i} className="flex items-center gap-3 text-[12.5px]">
-                <span className={`tag ${r.ok ? "tier-2" : "tier-0"}`}>{r.ok ? "成功" : "失败"}</span>
-                <span className="mono text-zinc-400 shrink-0">{r.run_date}</span>
-                <span className="text-zinc-600 flex-1 truncate">{r.detail}</span>
-                <span className="mono text-zinc-400 tabular-nums shrink-0">{Math.round(r.ms / 1000)}s</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* 引擎自动运行记录 */}
       {cronRuns.length > 0 && (

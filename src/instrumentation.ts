@@ -95,7 +95,7 @@ export async function register() {
       const inserted = ing.reduce((s, x) => s + x.inserted, 0);
       const cnAdded = Object.values(cn).reduce((s, n) => s + n, 0);
       if (inserted + cnAdded > 0) {
-        await extractPending(); // 新信息立刻抽实体/主张，冲突雷达与简报才能看见
+        await extractPending(); // 新信息立刻抽实体/主张，链条与简报才能看见
         console.log(`[wl-live] +${inserted} rss / +${cnAdded} cninfo items ingested & extracted`);
       }
       // 蒸馏跟随：每 20 分钟消化 40 条积压（每天 ~2880 条），避免采集远快于理解
