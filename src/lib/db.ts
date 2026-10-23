@@ -229,6 +229,17 @@ function initSchema(db: DatabaseSync) {
       rating INTEGER NOT NULL,                  -- 1 again 2 hard 3 good 4 easy
       reviewed_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- ===== v5: 访问统计（只记 IP/路径/UA，不含任何身份信息；公开页只展示掩码 IP）=====
+    CREATE TABLE IF NOT EXISTS visits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ip TEXT NOT NULL,
+      path TEXT NOT NULL DEFAULT '/',
+      ua TEXT DEFAULT '',
+      ts TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_visits_ts ON visits(ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_visits_ip ON visits(ip);
   `);
 
   /* 旧库清理：把 fts5 虚拟表和挂在 items/nuggets 上的同步触发器拆掉。
