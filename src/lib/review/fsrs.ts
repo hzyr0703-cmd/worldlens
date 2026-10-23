@@ -51,7 +51,7 @@ export function dueCards(limit = 20): DueCard[] {
     .prepare(
       `SELECT rc.*, n.status AS nuggetStatus FROM review_cards rc
        JOIN nuggets n ON n.id = rc.nugget_id
-       WHERE rc.due <= datetime('now') ORDER BY rc.due LIMIT ?`
+       WHERE rc.due <= datetime('now') AND rc.kind = 'verify' ORDER BY rc.due LIMIT ?`
     )
     .all(limit) as unknown as (CardRow & { nuggetStatus: string; kind: string })[];
   return rows.map((r) => {
@@ -63,7 +63,7 @@ export function dueCards(limit = 20): DueCard[] {
 export function pendingCount(): number {
   const db = getDb();
   return (
-    db.prepare(`SELECT COUNT(*) n FROM review_cards WHERE due <= datetime('now')`).get() as unknown as { n: number }
+    db.prepare(`SELECT COUNT(*) n FROM review_cards WHERE kind = 'verify' AND due <= datetime('now')`).get() as unknown as { n: number }
   ).n;
 }
 

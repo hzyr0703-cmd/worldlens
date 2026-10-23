@@ -304,8 +304,8 @@ export default function Home() {
               <a href="/review" className="neon-card card-in block rounded-2xl px-6 py-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <div className="text-[16px] font-semibold tracking-[-0.01em]">{due} 张卡片到期</div>
-                    <div className="text-[12.5px] text-zinc-500 mt-1">回忆是磨损的过程，也是拥有的过程</div>
+                    <div className="text-[16px] font-semibold tracking-[-0.01em]">{due} 张对账卡到期</div>
+                    <div className="text-[12.5px] text-zinc-500 mt-1">当初的判断，现在被现实验证了吗</div>
                   </div>
                   <span className="pill pill-active shrink-0">复习 →</span>
                 </div>

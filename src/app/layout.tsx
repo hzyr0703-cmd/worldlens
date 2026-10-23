@@ -34,7 +34,7 @@ const NAV_GROUPS = [
   {
     group: "我",
     items: [
-      { href: "/review", label: "复习" },
+      { href: "/review", label: "对账" },
       { href: "/log", label: "日志" },
       { href: "/status", label: "运转" },
     ],
@@ -83,7 +83,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 投喂文章
               </Link>
               <Link href="/review" prefetch className="cta magnetic !px-3.5 !py-2 sm:!px-4 sm:!py-2.5 !text-[12.5px] sm:!text-[13px]">
-                开始复习
+                去对账
               </Link>
             </div>
           </div>

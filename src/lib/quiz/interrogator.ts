@@ -252,12 +252,10 @@ export async function digestArticle(articleId: number): Promise<{
       /* 变式生成失败不阻塞沉淀 */
     }
 
+    // 2026-10-23：背诵卡退场——精读流程已降级为辅助，「复习」页改为「对账台」只处理验证卡，
+    // 不再为新原子生成 recall 闪卡（原子本身仍入库、仍参与连边与简报）。
     for (let i = 0; i < createdQ.length; i++) {
-      const c = createdQ[i];
-      const variant = (variants[i] ?? "").trim().slice(0, 300);
-      db.prepare(
-        `INSERT INTO review_cards (nugget_id, question, answer, variant) VALUES (?, ?, ?, ?)`
-      ).run(c.nid, c.q, c.a, variant);
+      void variants[i];
       cards++;
     }
   }

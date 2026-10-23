@@ -1,9 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
-import { dueCards, gradeCard, pendingCount, reviewStats, settleVerification, undoLastGrade } from "@/lib/review/fsrs";
+import { gradeCard, settleVerification, undoLastGrade } from "@/lib/review/fsrs";
+import { dueVerifyCards, nextVerifyDue, retireStaleVerifyCards, settledVerifyCards, upcomingVerifyCards } from "@/lib/verify/cards";
 
 export async function GET() {
-  return NextResponse.json({ ok: true, due: pendingCount(), cards: dueCards(), stats: reviewStats() });
+  // 先把早就过期、已无从结算的老验证点归档，避免台面被历史噪音占满
+  retireStaleVerifyCards(120);
+  // 先把早就过期、已无从结算的老验证点归档，避免台面被历史噪音占满
+  retireStaleVerifyCards(120);
+  // 对账台：只发验证卡，且每张都带「所属链条 + 可查证据」
+  const cards = dueVerifyCards();
+  return NextResponse.json({
+    ok: true,
+    due: cards.length,
+    cards,
+    nextDue: nextVerifyDue(),
+    settled: settledVerifyCards(),
+    upcoming: upcomingVerifyCards(),
+  });
 }
 
 export async function POST(req: NextRequest) {
