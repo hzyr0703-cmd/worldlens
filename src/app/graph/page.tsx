@@ -11,7 +11,7 @@ export default function GraphPage() {
         index="06"
         kicker="Graph"
         title="实体关系图谱"
-        desc="谁和谁总是一起出现？共现网络是理解利益结构的第一张地图——边的粗细代表 30 天内共同出现的强度。"
+        desc="实体共现看「哪些主体总在同一类事件里出现」——线的粗细是重叠度而不是出现次数，点开任一实体能看到它的强关联对象与具体证据；原子关系网看「你的认知之间如何互相支持或矛盾」。"
       />
       <div className="page-body">
         <div className="card-in">

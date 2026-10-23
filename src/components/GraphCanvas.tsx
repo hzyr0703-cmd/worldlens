@@ -6,8 +6,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 /* 数据类型                                                            */
 /* ------------------------------------------------------------------ */
 
-type EntityNode = { id: number; name: string; type: string; weight: number };
-type EntityEdge = { src_id: number; dst_id: number; weight: number };
+type EntityNode = { id: number; name: string; type: string; weight: number; degree?: number };
+type EntityEdge = {
+  src_id: number;
+  dst_id: number;
+  weight: number;
+  /** 重叠度（共现文章 / 两者出现过的文章并集）：画线宽用，比绝对次数更能代表关系强度 */
+  overlap?: number;
+  evidence?: { id: number; title: string; date: string }[];
+};
 
 type AtomNode = {
   id: number;
@@ -21,6 +28,16 @@ type AtomNode = {
 type AtomEdge = { src_id: number; dst_id: number; relation: string; rationale: string };
 
 type Mode = "entities" | "atoms";
+
+/**
+ * 原子节点标签：statement.slice(0,7) 得到的是「2026年9月」「黄金市场中，E」这类残句。
+ * 优先取第一个分句（读到逗号/句号/冒号为止），长度不足再顺延，最多 16 字。
+ */
+function atomLabel(s: string): string {
+  const head = s.split(/[，。；：、,;:]/)[0].trim();
+  if (head.length >= 4 && head.length <= 16) return head;
+  return s.slice(0, 16);
+}
 
 /* ------------------------------------------------------------------ */
 /* 常量                                                                */
@@ -234,6 +251,8 @@ export default function GraphCanvas() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hoverEntity, setHoverEntity] = useState<EntityNode | null>(null);
   const [selectedAtom, setSelectedAtom] = useState<AtomNode | null>(null);
+  /** 点击聚焦：只保留该实体与邻居，其余淡化——60 个点的图，不聚焦看不出结构 */
+  const [focusId, setFocusId] = useState<number | null>(null);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -267,6 +286,22 @@ export default function GraphCanvas() {
     [entityData]
   );
   const entityLayout = useForceLayout(svgRef, entityNodes, entityEdges, mode === "entities");
+
+  /* ---- 聚焦：选中实体的邻居（按共现强度排序，带证据）---- */
+  const entityMap = useMemo(() => new Map(entityNodes.map((n) => [n.id, n])), [entityNodes]);
+  const focusEntity = focusId === null ? null : entityMap.get(focusId) ?? null;
+  const focusNeighbors = useMemo(() => {
+    if (focusId === null) return [];
+    return (entityData?.edges ?? [])
+      .filter((e) => e.src_id === focusId || e.dst_id === focusId)
+      .map((e) => ({
+        other: entityMap.get(e.src_id === focusId ? e.dst_id : e.src_id),
+        edge: e,
+      }))
+      .filter((x): x is { other: EntityNode; edge: EntityEdge } => Boolean(x.other))
+      .sort((a, b) => b.edge.weight - a.edge.weight);
+  }, [focusId, entityData, entityMap]);
+  const neighborSet = useMemo(() => new Set(focusNeighbors.map((x) => x.other.id)), [focusNeighbors]);
 
   /* ---- 原子层 ---- */
   const atomNodes = useMemo(() => atomData?.nodes ?? [], [atomData]);
@@ -365,20 +400,9 @@ export default function GraphCanvas() {
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <button
           onClick={() => {
-            setMode("atoms");
-            setPinnedIds(new Set()); // 两层布局独立，切层清空固定状态
-          }}
-          className={`pill magnetic ${mode === "atoms" ? "pill-active" : ""}`}
-        >
-          原子关系网
-          <span className="mono ml-1 text-[11px] text-zinc-400 tabular-nums">
-            {atomData?.nodes.length ?? 0}
-          </span>
-        </button>
-        <button
-          onClick={() => {
             setMode("entities");
-            setPinnedIds(new Set());
+            setPinnedIds(new Set()); // 两层布局独立，切层清空固定状态
+            setFocusId(null);
           }}
           className={`pill magnetic ${mode === "entities" ? "pill-active" : ""}`}
         >
@@ -387,10 +411,23 @@ export default function GraphCanvas() {
             {entityData?.nodes.length ?? 0}
           </span>
         </button>
+        <button
+          onClick={() => {
+            setMode("atoms");
+            setPinnedIds(new Set());
+            setFocusId(null);
+          }}
+          className={`pill magnetic ${mode === "atoms" ? "pill-active" : ""}`}
+        >
+          原子关系网
+          <span className="mono ml-1 text-[11px] text-zinc-400 tabular-nums">
+            {atomData?.nodes.length ?? 0}
+          </span>
+        </button>
         <span className="ml-auto text-[12.5px] text-zinc-500">
           {mode === "atoms"
-            ? "节点=认知原子 · 边=支持 / 矛盾 / 解释 / 延伸 / 类比"
-            : "节点=实体 · 边=30 天内共同出现强度"}
+            ? "点=看这条原子与谁相连 · 边=支持 / 矛盾 / 解释 / 延伸 / 类比"
+            : "点一个实体，看它和谁绑在一起、凭什么绑"}
         </span>
       </div>
 
@@ -416,7 +453,9 @@ export default function GraphCanvas() {
             {/* 边 */}
             {mode === "entities" &&
               entityData!.edges.map((e, i) => {
-                const maxW = Math.max(...entityData!.edges.map((x) => x.weight), 1);
+                const maxJ = Math.max(...entityData!.edges.map((x) => x.overlap ?? 0), 0.01);
+                const related = focusId === null || e.src_id === focusId || e.dst_id === focusId;
+                const j = e.overlap ?? 0;
                 return (
                   <line
                     key={`ee-${i}`}
@@ -424,9 +463,9 @@ export default function GraphCanvas() {
                     data-src={e.src_id}
                     data-dst={e.dst_id}
                     x1="0" y1="0" x2="0" y2="0"
-                    stroke="#c2c2c8"
-                    strokeWidth={0.5 + (e.weight / maxW) * 2.2}
-                    strokeOpacity={0.3 + (e.weight / maxW) * 0.4}
+                    stroke={related && focusId !== null ? "#8a8f96" : "#c2c2c8"}
+                    strokeWidth={0.6 + (j / maxJ) * 2.6 + (related && focusId !== null ? 0.9 : 0)}
+                    strokeOpacity={related ? 0.28 + (j / maxJ) * 0.5 : 0.05}
                   />
                 );
               })}
@@ -446,7 +485,10 @@ export default function GraphCanvas() {
               ))}
             {/* 节点 */}
             {mode === "entities" &&
-              entityData!.nodes.map((n) => (
+              entityData!.nodes.map((n) => {
+                const dimmed = focusId !== null && n.id !== focusId && !neighborSet.has(n.id);
+                const isFocus = focusId === n.id;
+                return (
                 <g
                   key={n.id}
                   className="gnode"
@@ -454,30 +496,35 @@ export default function GraphCanvas() {
                   onMouseEnter={() => setHoverEntity(n)}
                   onMouseLeave={() => setHoverEntity(null)}
                   onPointerDown={(e) => beginDrag(e, n.id, entityLayout)}
+                  onClick={() => {
+                    if (suppressClickRef.current) return; // 拖拽结束不触发点击
+                    setFocusId(isFocus ? null : n.id);
+                  }}
                   onDoubleClick={() => togglePin(n.id, entityLayout)}
-                  style={{ cursor: pinnedIds.has(n.id) ? "grabbing" : "grab" }}
+                  style={{ cursor: pinnedIds.has(n.id) ? "grabbing" : "pointer" }}
                 >
                   <circle
                     r={(6 + Math.min(10, Math.sqrt(n.weight) * 2.5)) * 1.15}
                     fill={ENTITY_FILL[n.type] ?? ENTITY_FILL_FALLBACK}
-                    fillOpacity={0.88}
-                    stroke={pinnedIds.has(n.id) ? "#d9a441" : "#fff"}
-                    strokeWidth={pinnedIds.has(n.id) ? 2.2 : 1.2}
+                    fillOpacity={dimmed ? 0.12 : 0.88}
+                    stroke={pinnedIds.has(n.id) ? "#d9a441" : isFocus ? "#0a0a0b" : "#fff"}
+                    strokeWidth={pinnedIds.has(n.id) || isFocus ? 2.2 : 1.2}
                   />
                   <text
                     y={-12}
                     textAnchor="middle"
                     fontSize={10.5}
-                    fill="#3f3f46"
-                    fontWeight={500}
+                    fill={dimmed ? "#c9c9ce" : "#3f3f46"}
+                    fontWeight={isFocus ? 700 : 500}
                     stroke="#fcfcfd"
                     strokeWidth={2.6}
                     paintOrder="stroke"
                   >
-                    {n.name.slice(0, 8)}
+                    {n.name.slice(0, 10)}
                   </text>
                 </g>
-              ))}
+                );
+              })}
             {mode === "atoms" &&
               atomData!.nodes.map((n) => (
                 <g
@@ -515,14 +562,73 @@ export default function GraphCanvas() {
                     strokeWidth={2.6}
                     paintOrder="stroke"
                   >
-                    {n.statement.slice(0, 7)}
+                    {atomLabel(n.statement)}
                   </text>
                 </g>
               ))}
           </svg>
 
-          {/* 实体悬停卡 */}
-          {mode === "entities" && hoverEntity && (
+          {/* 实体聚焦卡：点一个实体，看它和谁绑在一起、凭什么绑 */}
+          {mode === "entities" && focusEntity && (
+            <div className="panel absolute top-3 right-3 flex max-h-[calc(100%-1.5rem)] w-[330px] flex-col p-5">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[14px] font-semibold">{focusEntity.name}</span>
+                    <span className="text-[11px] text-zinc-500">
+                      {ENTITY_CN[focusEntity.type] ?? focusEntity.type} · 提及 {focusEntity.weight} 次
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11.5px] text-zinc-400">
+                    {focusNeighbors.length} 条强关联 · 45 天内共同出现
+                  </p>
+                </div>
+                <button
+                  onClick={() => setFocusId(null)}
+                  className="ml-auto shrink-0 text-zinc-300 hover:text-zinc-600"
+                  aria-label="取消聚焦"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-auto border-t border-zinc-100 pt-3">
+                {focusNeighbors.length === 0 && (
+                  <p className="text-[12px] text-zinc-400">还没有强到能画出来的关联。</p>
+                )}
+                {focusNeighbors.map(({ other, edge }) => (
+                  <div key={other.id}>
+                    <div className="flex items-baseline gap-2">
+                      <button
+                        onClick={() => setFocusId(other.id)}
+                        className="text-left text-[12.5px] font-medium text-zinc-800 hover:text-[#007a8c]"
+                      >
+                        {other.name}
+                      </button>
+                      <span className="mono ml-auto shrink-0 text-[10.5px] text-zinc-400 tabular-nums">
+                        重叠 {Math.round((edge.overlap ?? 0) * 100)}% · {edge.weight} 次
+                      </span>
+                    </div>
+                    {(edge.evidence ?? []).map((ev) => (
+                      <div key={ev.id} className="mt-1 text-[11px] leading-snug text-zinc-500">
+                        <span className="mono text-zinc-400">{ev.date}</span> {ev.title}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <a
+                href={`/entity/${focusEntity.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 shrink-0 text-[11.5px] text-[#007a8c] hover:underline"
+              >
+                完整档案（信息 · 公告 · 链条 · 原子）→
+              </a>
+            </div>
+          )}
+
+          {/* 未聚焦时的轻量悬停卡 */}
+          {mode === "entities" && !focusEntity && hoverEntity && (
             <div className="panel absolute top-3 right-3 max-w-[280px] px-4 py-2.5 text-[12.5px]">
               <div>
                 <span className="font-semibold">{hoverEntity.name}</span>
@@ -530,14 +636,7 @@ export default function GraphCanvas() {
                   {ENTITY_CN[hoverEntity.type] ?? hoverEntity.type} · 提及 {hoverEntity.weight} 次
                 </span>
               </div>
-              <a
-                href={`/entity/${hoverEntity.id}`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 inline-block text-[11.5px] text-[#007a8c] hover:underline"
-              >
-                查看完整档案（信息 · 公告 · 链条 · 原子）→
-              </a>
+              <p className="mt-1 text-[11px] text-zinc-400">点一下看它和谁绑在一起</p>
             </div>
           )}
 
@@ -619,7 +718,10 @@ export default function GraphCanvas() {
                   <svg width="34" height="10" aria-hidden>
                     <line x1="1" y1="5" x2="33" y2="5" stroke="#c2c2c8" strokeWidth={2.4} />
                   </svg>
-                  边越粗＝共现越强
+                  边越粗＝重叠度越高（两者越"总在同一类事件里出现"）
+                </span>
+                <span className="text-zinc-400">
+                  已滤掉媒体名与泛词，每个实体只留最强 4 条边（重叠度 ≥5%）
                 </span>
               </>
             ) : (
@@ -650,7 +752,7 @@ export default function GraphCanvas() {
             <span className={mode === "atoms" ? "" : "ml-auto"}>
               {mode === "atoms"
                 ? "点击看详情 · 拖动固定 · 双击解除"
-                : "悬停看详情 · 拖动固定 · 双击解除"}
+                : "点击聚焦 · 拖动固定 · 双击解除"}
             </span>
             {pinnedIds.size > 0 && (
               <button
