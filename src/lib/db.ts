@@ -278,6 +278,8 @@ function initSchema(db: DatabaseSync) {
     `ALTER TABLE articles ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'official'`,
     // 蒸馏队列标记：原先散落在 distill/pipeline 的 ensureDistilledColumn()，收归到统一迁移
     `ALTER TABLE items ADD COLUMN distilled INTEGER NOT NULL DEFAULT 0`,
+    // 访客去重的第二口径：按浏览器匿名 ID（middleware 下发 wl_vid），比 IP 更接近真实人数
+    `ALTER TABLE visits ADD COLUMN vid TEXT NOT NULL DEFAULT ''`,
   ]) {
     try {
       db.exec(ddl);

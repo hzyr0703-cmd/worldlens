@@ -30,21 +30,27 @@ export async function recordVisit(): Promise<void> {
     if (mode && mode !== "navigate") return;
     const fwd = (h.get("x-forwarded-for") ?? "").split(",")[0].trim();
     const ip = fwd || h.get("x-real-ip") || "unknown";
-    // next-url 是 Next 内部头（值为页面路径）；拿不到就记根路径
-    const path = (h.get("next-url") || h.get("x-invoke-path") || "/").split("?")[0] || "/";
+    // 路径由 middleware 注入（x-wl-path）；旧回退仅兜底
+    const path = h.get("x-wl-path") || (h.get("next-url") || h.get("x-invoke-path") || "/").split("?")[0] || "/";
     const ua = (h.get("user-agent") ?? "").slice(0, 120);
-    getDb().prepare(`INSERT INTO visits (ip, path, ua) VALUES (?, ?, ?)`).run(ip, path, ua);
+    // 匿名访客 ID：middleware 对没有 wl_vid cookie 的导航请求下发并注入此头
+    const vid = h.get("x-wl-vid") ?? "";
+    getDb().prepare(`INSERT INTO visits (ip, path, ua, vid) VALUES (?, ?, ?, ?)`).run(ip, path, ua, vid);
   } catch {
     /* 统计失败绝不阻塞页面渲染 */
   }
 }
 
 export type VisitStats = {
+  /** 累计独立访客（按匿名设备 ID 去重——主口径） */
   uniqueTotal: number;
+  /** 累计独立 IP（对照口径） */
+  uniqueIpTotal: number;
   uniqueToday: number;
+  uniqueIpToday: number;
   pvTotal: number;
   pvToday: number;
-  days: { day: string; ips: number; pv: number }[];
+  days: { day: string; ips: number; ipv: number; pv: number }[];
   topPaths: { path: string; pv: number; ips: number }[];
   recent: { ip: string; path: string; ts: string }[];
 };
@@ -54,12 +60,16 @@ export function visitStats(): VisitStats {
   const q = <T,>(sql: string, ...args: (string | number)[]) =>
     db.prepare(sql).all(...args) as unknown as T[];
 
-  const [tot] = q<{ u: number; pv: number }>(
-    `SELECT COUNT(DISTINCT ip) u, COUNT(*) pv FROM visits`
+  // 访客主口径 = 匿名设备 ID（vid）；IP 口径保留作对照。vid 为空的历史行不计入。
+  const [tot] = q<{ u: number; ipu: number; pv: number }>(
+    `SELECT COUNT(DISTINCT CASE WHEN vid != '' THEN vid END) u,
+            COUNT(DISTINCT ip) ipu, COUNT(*) pv FROM visits`
   );
-  // ts 存的是 UTC；"今天"按北京时间对齐（date(ts, '+8 hours')）
-  const days = q<{ day: string; ips: number; pv: number }>(
-    `SELECT date(ts, '+8 hours') day, COUNT(DISTINCT ip) ips, COUNT(*) pv
+  const days = q<{ day: string; ips: number; ipv: number; pv: number }>(
+    `SELECT date(ts, '+8 hours') day,
+            COUNT(DISTINCT ip) ips,
+            COUNT(DISTINCT CASE WHEN vid != '' THEN vid END) ipv,
+            COUNT(*) pv
      FROM visits GROUP BY day ORDER BY day DESC LIMIT 7`
   );
   const topPaths = q<{ path: string; pv: number; ips: number }>(
@@ -72,9 +82,11 @@ export function visitStats(): VisitStats {
   const todayKey = days[0]?.day ?? "";
   return {
     uniqueTotal: tot?.u ?? 0,
+    uniqueIpTotal: tot?.ipu ?? 0,
     pvTotal: tot?.pv ?? 0,
     // 今日 = 北京时间今天（days 按天倒序，第一行就是它）
-    uniqueToday: days.find((d) => d.day === todayKey)?.ips ?? 0,
+    uniqueToday: days.find((d) => d.day === todayKey)?.ipv ?? 0,
+    uniqueIpToday: days.find((d) => d.day === todayKey)?.ips ?? 0,
     pvToday: days.find((d) => d.day === todayKey)?.pv ?? 0,
     days,
     topPaths,

@@ -155,13 +155,15 @@ export default async function StatusPage() {
         <div className="mt-10 panel p-6">
           <div className="flex flex-wrap items-baseline gap-3">
             <div className="sec-index mono">访问 · 有多少人来过</div>
-            <span className="text-[11.5px] text-zinc-400">按 IP 去重 · 预取请求不计 · 公开页只展示掩码 IP</span>
+            <span className="text-[11.5px] text-zinc-400">
+              按匿名设备 ID 去重（同一设备换网络不重复计数）· IP 口径仅作对照 · 预取请求不计 · IP 掩码展示
+            </span>
           </div>
 
           <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: "累计访客（独立 IP）", v: vs.uniqueTotal, note: "开站以来" },
-              { label: "今日访客", v: vs.uniqueToday, note: "北京时间今天" },
+              { label: "累计访客（设备）", v: vs.uniqueTotal, note: `另有 ${vs.uniqueIpTotal} 个独立 IP` },
+              { label: "今日访客（设备）", v: vs.uniqueToday, note: `独立 IP ${vs.uniqueIpToday}` },
               { label: "累计浏览（PV）", v: vs.pvTotal, note: "所有页面请求" },
               { label: "今日浏览", v: vs.pvToday, note: "北京时间今天" },
             ].map((x) => (
@@ -175,15 +177,15 @@ export default async function StatusPage() {
 
           {vs.days.length > 0 && (
             <div className="mt-6">
-              <div className="text-[12px] font-medium text-zinc-500">近 7 天（每日 PV，条上标独立 IP）</div>
+              <div className="text-[12px] font-medium text-zinc-500">近 7 天（每日 PV，条上标访客设备数）</div>
               <div className="mt-3 flex items-end gap-2 h-24">
                 {[...vs.days].reverse().map((d) => (
                   <div key={d.day} className="flex flex-1 flex-col items-center gap-1">
-                    <span className="mono text-[10px] text-zinc-400 tabular-nums">{d.ips}</span>
+                    <span className="mono text-[10px] text-zinc-400 tabular-nums">{d.ipv}</span>
                     <div
                       className="w-full rounded-t bg-[#00b8d4]/70 min-h-[3px]"
                       style={{ height: `${Math.max(4, (d.pv / maxDayPv) * 64)}px` }}
-                      title={`${d.day} · ${d.pv} 次浏览 / ${d.ips} 个 IP`}
+                      title={`${d.day} · ${d.pv} 次浏览 / ${d.ipv} 台设备 / ${d.ips} 个 IP`}
                     />
                     <span className="mono text-[9.5px] text-zinc-400">{d.day.slice(5)}</span>
                   </div>
