@@ -80,12 +80,13 @@ export async function GET(req: NextRequest) {
   // ── 实体共现 ──────────────────────────────────────────────────────────────
   // 45 天窗口内、双方提及数 ≥3 的实体对。
   // 关键：不能按"共同出现的文章数"排序——那会把 AI/中国/美国 这类泛实体顶到最前
-  // （AI—中国 共现 102 次，但重叠度只有 0.077）。改用重叠度 Jaccard = w/(ma+mb-w)，
+  // （AI—中国 共现 102 次，但重叠度只有 0.077）。改用重叠度 Jaccard = w/(da+db-w)，
   // 真正绑在一起的对象才会浮上来：SK海力士—三星电子 0.415、上证—深证成指 0.400。
+  // 分母必须用【同窗口内】各实体的 DISTINCT 文章数——mention_count 是全量口径，
+  // 和分子不同窗，算出来的重叠度会系统性偏低。
   const pairRows = db
     .prepare(
-      `SELECT c1.entity_id AS a, c2.entity_id AS b, COUNT(DISTINCT c1.item_id) AS w,
-              e1.mention_count AS ma, e2.mention_count AS mb
+      `SELECT c1.entity_id AS a, c2.entity_id AS b, COUNT(DISTINCT c1.item_id) AS w
        FROM claims c1
        JOIN claims c2 ON c1.item_id = c2.item_id AND c1.entity_id < c2.entity_id
        JOIN entities e1 ON e1.id = c1.entity_id AND e1.mention_count >= 3
@@ -93,13 +94,28 @@ export async function GET(req: NextRequest) {
        WHERE date(COALESCE((SELECT published_at FROM items WHERE id = c1.item_id), '2000-01-01')) >= date('now', '-45 day')
           OR (SELECT published_at FROM items WHERE id = c1.item_id) IS NULL
        GROUP BY a, b
-       ORDER BY w DESC LIMIT 800`
+       ORDER BY w DESC`
     )
-    .all() as unknown as { a: number; b: number; w: number; ma: number; mb: number }[];
+    .all() as unknown as { a: number; b: number; w: number }[];
 
-  /** 重叠度：两实体共现文章数 / 它们出现过的文章并集 */
-  const jaccardOf = (p: { w: number; ma: number; mb: number }) =>
-    p.w / Math.max(1, p.ma + p.mb - p.w);
+  // 同窗口内每个实体出现过的 DISTINCT 文章数（Jaccard 分母），与 w 同窗才可比
+  const winRows = db
+    .prepare(
+      `SELECT c.entity_id AS e, COUNT(DISTINCT c.item_id) AS n
+       FROM claims c
+       JOIN items i ON i.id = c.item_id
+       WHERE date(COALESCE(i.published_at, i.fetched_at)) >= date('now', '-45 day')
+       GROUP BY c.entity_id`
+    )
+    .all() as unknown as { e: number; n: number }[];
+  const windowDocs = new Map(winRows.map((r) => [r.e, r.n]));
+
+  /** 重叠度：两实体共现文章数 / 它们在窗口内出现过的文章并集 */
+  const jaccardOf = (a: number, b: number, w: number) => {
+    const da = windowDocs.get(a) ?? 1;
+    const dbb = windowDocs.get(b) ?? 1;
+    return w / Math.max(1, da + dbb - w);
+  };
 
   const entRows = db
     .prepare(`SELECT id, name, type, mention_count, aliases FROM entities WHERE mention_count >= 3`)
@@ -141,7 +157,7 @@ export async function GET(req: NextRequest) {
 
   const clean = pairRows
     .filter((p) => !isNoise(p.a) && !isNoise(p.b) && !sameIdentity(p.a, p.b))
-    .map((p) => ({ ...p, j: jaccardOf(p) }))
+    .map((p) => ({ ...p, j: jaccardOf(p.a, p.b, p.w) }))
     // 重叠度 <5% = 只是"碰巧同在一篇文章"，不配占一条线
     .filter((p) => p.j >= 0.05);
 

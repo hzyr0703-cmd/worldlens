@@ -85,12 +85,13 @@ export function visitStats(): VisitStats {
   const recent = q<{ ip: string; path: string; ts: string }>(
     `SELECT ip, path, ts FROM visits ORDER BY id DESC LIMIT 12`
   );
-  const todayKey = days[0]?.day ?? "";
+  // "今天"必须按北京时间算——days[0] 是"最近一个有访问的日子"，
+  // 一整天没人来时它会指向前天，访客数看起来凭空多出一天
+  const todayKey = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
   return {
     uniqueTotal: tot?.u ?? 0,
     uniqueIpTotal: tot?.ipu ?? 0,
     pvTotal: tot?.pv ?? 0,
-    // 今日 = 北京时间今天（days 按天倒序，第一行就是它）
     uniqueToday: days.find((d) => d.day === todayKey)?.ipv ?? 0,
     uniqueIpToday: days.find((d) => d.day === todayKey)?.ips ?? 0,
     pvToday: days.find((d) => d.day === todayKey)?.pv ?? 0,

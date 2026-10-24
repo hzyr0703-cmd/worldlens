@@ -197,14 +197,30 @@ export async function distillDaily(date?: string, limit = 400): Promise<DistillR
         candidates = parseJsonArray<RawNugget>(raw2).slice(0, 4);
       }
     } catch (e) {
-      // 内容安全过滤（智谱 1301 等）或其他 LLM 错误：跳过该批但不阻塞队列，
-      // 标记 distilled = 2（skipped），避免敏感批永远卡在队列头部
+      // 错误分两类处理：429/超时/网络是临时的，计次重试（≥3 次才放弃）；
+      // 内容安全过滤等不可恢复的才直接标 distilled=2 永久跳过。
+      // 原先一刀切标 2，把限流期间的批次也永久丢了（565 条，占库存 9%）。
       const msg = e instanceof Error ? e.message : String(e);
-      db.prepare(
-        `UPDATE items SET distilled = 2 WHERE id IN (${chunk.map(() => "?").join(",")})`
-      ).run(...chunk.map((r) => r.id));
-      result.batches--; result.scanned -= chunk.length; result.skipped += chunk.length;
-      console.error(`[distill] batch skipped (content-filter or LLM error): ${msg.slice(0, 120)}`);
+      const transient =
+        /429|rate.?limit|too many|timeout|timed?\s*out|ECONN|EAI_AGAIN|fetch failed|socket|network|aborted|502|503|504/i.test(msg);
+      const ids = chunk.map((r) => r.id);
+      const ph = chunk.map(() => "?").join(",");
+      if (transient) {
+        db.prepare(`UPDATE items SET distill_attempts = COALESCE(distill_attempts, 0) + 1 WHERE id IN (${ph})`).run(...ids);
+        const giveUpRow = db
+          .prepare(`SELECT COUNT(*) c FROM items WHERE id IN (${ph}) AND distill_attempts >= 3`)
+          .get(...ids) as unknown as { c: number };
+        const giveUp = giveUpRow?.c ?? 0;
+        if (giveUp > 0) {
+          db.prepare(`UPDATE items SET distilled = 2 WHERE id IN (${ph}) AND distill_attempts >= 3`).run(...ids);
+        }
+        result.batches--; result.scanned -= giveUp; result.skipped += giveUp;
+        console.error(`[distill] batch transient failure (kept ${ids.length - giveUp} for retry): ${msg.slice(0, 120)}`);
+      } else {
+        db.prepare(`UPDATE items SET distilled = 2 WHERE id IN (${ph})`).run(...ids);
+        result.batches--; result.scanned -= ids.length; result.skipped += ids.length;
+        console.error(`[distill] batch skipped (content-filter or permanent): ${msg.slice(0, 120)}`);
+      }
       continue;
     }
 
@@ -214,10 +230,7 @@ export async function distillDaily(date?: string, limit = 400): Promise<DistillR
       // ---- 低质机制过滤：循环论证 / 同义反复 / 空泛表述 ----
       if (!isQualityAtom(c.type, c.statement)) continue;
 
-      // ---- 低质机制过滤：循环论证 / 同义反复 / 空泛表述 ----
-      if (!isQualityAtom(c.type, c.statement)) continue;
-
-      // ---- 语义去重：与库内 FTS 相似原子做 bigram 重合比对，重复则强化旧原子而非新建 ----
+      // ---- 语义去重：与库内相似原子做 bigram 重合比对，重复则强化旧原子而非新建 ----
       const dup = await findDuplicate(c.statement);
       if (dup) {
         db.prepare(

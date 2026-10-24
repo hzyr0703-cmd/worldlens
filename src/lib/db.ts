@@ -280,6 +280,10 @@ function initSchema(db: DatabaseSync) {
     `ALTER TABLE items ADD COLUMN distilled INTEGER NOT NULL DEFAULT 0`,
     // 访客去重的第二口径：按浏览器匿名 ID（middleware 下发 wl_vid），比 IP 更接近真实人数
     `ALTER TABLE visits ADD COLUMN vid TEXT NOT NULL DEFAULT ''`,
+    // 蒸馏临时失败计次：429/超时不再一刀切永久跳过，连续 3 次才放弃
+    `ALTER TABLE items ADD COLUMN distill_attempts INTEGER NOT NULL DEFAULT 0`,
+    // 简报版本标记：深度版（deep=1）不被每小时免费的"跟随重建"覆盖
+    `ALTER TABLE digests ADD COLUMN deep INTEGER NOT NULL DEFAULT 0`,
   ]) {
     try {
       db.exec(ddl);
@@ -305,6 +309,23 @@ function initSchema(db: DatabaseSync) {
     // 一夜刷出几千假访客）。真实浏览器 UA 一律以 Mozilla 开头，探针不是。
     // recordVisit 现已双重过滤，这里清掉历史脏数据。
     db.exec(`DELETE FROM visits WHERE ua NOT LIKE 'Mozilla%'`);
+  } catch {
+    /* 清理失败不影响启动 */
+  }
+  try {
+    // 蒸馏失败回填：distilled=2 的行此前一刀切标记（含大量限流临时失败），
+    // 视为已失败一次；回填 attempts 后新逻辑可继续重试到 3 次上限
+    db.exec(`UPDATE items SET distill_attempts = 1 WHERE distilled = 2 AND distill_attempts = 0`);
+  } catch {
+    /* 回填失败不影响启动 */
+  }
+  try {
+    // 历史垃圾清理：10-21 那期 328 字 JSON 简报（校验逻辑上线前入库的废品）；
+    // 废弃的 recall 闪卡（对账台只处理 verify，死卡留在库里虚增"到期"计数）；
+    // 访问明细只留 90 天（统计用途，控制体积）
+    db.exec(`DELETE FROM digests WHERE length(content) < 400`);
+    db.exec(`DELETE FROM review_cards WHERE kind = 'recall'`);
+    db.exec(`DELETE FROM visits WHERE ts < datetime('now', '-90 days')`);
   } catch {
     /* 清理失败不影响启动 */
   }

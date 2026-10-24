@@ -1,14 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { wlFetch } from "@/lib/client/fetch";
 
-/** 深度版简报：用付费模型重算一次——按需付费，日常仍用免费模型。生成要 2 分钟左右，走后台任务 */
+type JobState = { running: boolean; ok?: boolean; detail?: string };
+
+/** 深度版简报：用付费模型重算一次——按需付费，日常仍用免费模型。生成 2 分钟左右，走后台任务并轮询 */
 export default function DigestDeepButton() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   async function run() {
     setBusy(true);
@@ -21,13 +26,31 @@ export default function DigestDeepButton() {
       const d = (await res.json().catch(() => null)) as { message?: string; error?: string } | null;
       if (!res.ok) throw new Error(d?.error ?? `HTTP ${res.status}`);
       setMsg(d?.message ?? "已启动");
-      // 深度版约 2 分钟，到点自动刷新
-      setTimeout(() => router.refresh(), 120000);
+      // 轮询 /api/digest 的 job.deep 字段直到完成（约 2 分钟）
+      stopPoll();
+      pollRef.current = setInterval(async () => {
+        try {
+          const r = await fetch("/api/digest").then((x) => x.json());
+          const j: JobState | undefined = r?.job?.deep;
+          if (j && !j.running) {
+            stopPoll();
+            setBusy(false);
+            setMsg(j.ok ? `完成：${j.detail}` : `失败：${j.detail}`);
+            router.refresh();
+          }
+        } catch {
+          /* 忽略 */
+        }
+      }, 5000);
     } catch (e) {
       setMsg(`失败: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
       setBusy(false);
     }
+  }
+
+  function stopPoll() {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = null;
   }
 
   return (

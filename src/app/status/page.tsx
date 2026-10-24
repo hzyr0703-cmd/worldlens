@@ -12,7 +12,8 @@ const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
 /** 系统健康 —— 采集 / 蒸馏 / 链条 / 简报 / LLM 的实时运转状态 */
 export default async function StatusPage() {
   const db = getDb();
-  const today = new Date().toISOString().slice(0, 10);
+  // 全站"今天"统一按北京时间——简报日期、cron_log 都是北京口径
+  const today = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
 
   const runs = db
     .prepare(`SELECT run_date, ok, detail, ms, created_at FROM cron_log ORDER BY id DESC LIMIT 10`)
@@ -31,7 +32,7 @@ export default async function StatusPage() {
     .prepare(
       `SELECT
         (SELECT COUNT(*) FROM items) AS items,
-        (SELECT COUNT(*) FROM items WHERE date(COALESCE(published_at, fetched_at)) = date('now')) AS items_today,
+        (SELECT COUNT(*) FROM items WHERE date(COALESCE(published_at, fetched_at), '+8 hours') = date('now', '+8 hours')) AS items_today,
         (SELECT COUNT(*) FROM items WHERE distilled = 0) AS backlog,
         (SELECT COUNT(*) FROM claims) AS claims,
         (SELECT COUNT(*) FROM nuggets WHERE status != 'retired') AS atoms,
@@ -71,7 +72,7 @@ export default async function StatusPage() {
   // 最近 7 天 cron 是否都成功
   const last7 = db
     .prepare(
-      `SELECT date('now', '-' || d || ' day') AS day FROM (SELECT 0 d UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6)`
+      `SELECT date('now', '+8 hours', '-' || d || ' day') AS day FROM (SELECT 0 d UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6)`
     )
     .all() as unknown as { day: string }[];
   const runDays = new Set(runs.filter((r) => r.ok === 1).map((r) => r.run_date));

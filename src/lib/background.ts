@@ -28,10 +28,20 @@ export function jobState(name: string): JobState {
   return jobs.get(name) ?? { running: false, startedAt: 0 };
 }
 
-/** 启动一个后台任务；同名任务已在跑时返回 started:false */
+/** 任务悬挂兜底：理论上不可能（LLM 调用都有 AbortSignal），但一旦发生，
+ *  后续所有手动触发都会被"上一次还在跑"挡死——30 分钟强制视为死亡。 */
+function isStale(s: JobState): boolean {
+  return s.running && Date.now() - s.startedAt > 30 * 60_000;
+}
+
+function finish(name: string, ok: boolean, detail: string): void {
+  jobs.set(name, { running: false, startedAt: 0, finishedAt: Date.now(), ok, detail });
+}
+
+/** 启动一个后台任务；同名任务已在跑（且未悬挂）时返回 started:false */
 export function startJob(name: string, fn: () => Promise<string>): { started: boolean; state: JobState } {
   const cur = jobs.get(name);
-  if (cur?.running) return { started: false, state: cur };
+  if (cur?.running && !isStale(cur)) return { started: false, state: cur };
 
   const state: JobState = { running: true, startedAt: Date.now() };
   jobs.set(name, state);
@@ -39,16 +49,38 @@ export function startJob(name: string, fn: () => Promise<string>): { started: bo
   void (async () => {
     try {
       const detail = await fn();
-      jobs.set(name, { running: false, startedAt: 0, finishedAt: Date.now(), ok: true, detail });
+      finish(name, true, detail);
       console.log(`[wl-job] ${name} done: ${detail}`);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
-      jobs.set(name, { running: false, startedAt: 0, finishedAt: Date.now(), ok: false, detail });
+      finish(name, false, detail);
       console.error(`[wl-job] ${name} failed: ${detail}`);
     }
   })();
 
   return { started: true, state };
+}
+
+/**
+ * 互斥执行并等待完成：cron 全链路用这个。
+ * 同名任务在跑（含 API 手动触发的）→ 返回 skipped，cron 跳过该段，
+ * 避免手动采集/蒸馏与每日全链路同时跑造成双写。
+ */
+export async function runJob(name: string, fn: () => Promise<string>): Promise<{ skipped: boolean; ok: boolean; detail: string }> {
+  const cur = jobs.get(name);
+  if (cur?.running && !isStale(cur)) {
+    return { skipped: true, ok: false, detail: `${name} 被其他任务占用` };
+  }
+  jobs.set(name, { running: true, startedAt: Date.now() });
+  try {
+    const detail = await fn();
+    finish(name, true, detail);
+    return { skipped: false, ok: true, detail };
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    finish(name, false, detail);
+    return { skipped: false, ok: false, detail };
+  }
 }
 
 /** 统一的「已启动」响应体 */

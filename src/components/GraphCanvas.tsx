@@ -105,12 +105,16 @@ function useForceLayout(
   svgRef: React.RefObject<SVGSVGElement | null>,
   nodes: { id: number; r?: number }[],
   edges: { src_id: number; dst_id: number; strength: number }[],
-  active: boolean
+  active: boolean,
+  onRebuild?: () => void
 ) {
   const posRef = useRef<Map<number, Pos>>(new Map());
   const rafRef = useRef(0);
   // tick 在 effect 内定义（含 Math.random，不能放渲染作用域），经 ref 供外部唤醒
   const tickRef = useRef<() => void>(() => {});
+  // onRebuild 用 ref 传递：避免回调变化导致布局重建（deps 里不放它）
+  const onRebuildRef = useRef(onRebuild);
+  onRebuildRef.current = onRebuild;
 
   useEffect(() => {
     if (!active || nodes.length === 0) return;
@@ -118,6 +122,8 @@ function useForceLayout(
     const H = 800;
     const pos = posRef.current;
     pos.clear();
+    // 布局坐标已重建，旧的固定状态指向的坐标全部失效——通知上层清空
+    onRebuildRef.current?.();
     // 碰撞半径：圆点不能叠在一起，标签也要留出位置
     const radiusOf = new Map(nodes.map((n) => [n.id, n.r ?? 20]));
     nodes.forEach((n, i) => {
@@ -304,7 +310,7 @@ export default function GraphCanvas() {
     () => (entityData?.edges ?? []).map((e) => ({ src_id: e.src_id, dst_id: e.dst_id, strength: e.weight })),
     [entityData]
   );
-  const entityLayout = useForceLayout(svgRef, entityNodes, entityEdges, mode === "entities");
+  const entityLayout = useForceLayout(svgRef, entityNodes, entityEdges, mode === "entities", () => setPinnedIds(new Set()));
 
   /* ---- 聚焦：选中实体的邻居（按共现强度排序，带证据）---- */
   const entityMap = useMemo(
@@ -334,7 +340,7 @@ export default function GraphCanvas() {
     () => (atomData?.edges ?? []).map((e) => ({ src_id: e.src_id, dst_id: e.dst_id, strength: 1 })),
     [atomData]
   );
-  const atomLayout = useForceLayout(svgRef, atomNodes, atomEdges, mode === "atoms");
+  const atomLayout = useForceLayout(svgRef, atomNodes, atomEdges, mode === "atoms", () => setPinnedIds(new Set()));
 
   /* ---- 节点拖拽固定 ----
    * 按住拖动 = 钉在该处（琥珀描边），双击 = 解除固定回到力导向。
@@ -370,11 +376,13 @@ export default function GraphCanvas() {
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
       dragRef.current = null;
       setTimeout(() => (suppressClickRef.current = false), 0);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   };
 
   const togglePin = (id: number, layout: typeof entityLayout) => {

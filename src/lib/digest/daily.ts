@@ -79,7 +79,8 @@ export function validateDigestBody(md: string): { ok: boolean; reason?: string }
 
 export async function buildDigest(date?: string, opts?: { deep?: boolean }): Promise<{ date: string; content: string; model: string }> {
   const db = getDb();
-  const d = date ?? new Date().toISOString().slice(0, 10);
+  // 简报日期按北京时间——"今天的简报"应该覆盖北京时间今天的快讯
+  const d = date ?? new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
 
   const topics = db
     .prepare(
@@ -224,13 +225,14 @@ C. 用户的认知原子库（用户长期保存、亲手沉淀的理解）
       .join("\n");
   }
 
+  const isDeep = Boolean(opts?.deep);
   db.prepare(
-    `INSERT INTO digests (date, content, stats) VALUES (?, ?, ?)
+    `INSERT INTO digests (date, content, stats, deep) VALUES (?, ?, ?, ?)
      ON CONFLICT(date) DO UPDATE SET content = excluded.content, stats = excluded.stats,
-       created_at = datetime('now')`
-  ).run(d, content, JSON.stringify(statsRow));
+       deep = excluded.deep, created_at = datetime('now')`
+  ).run(d, content, JSON.stringify(statsRow), isDeep ? 1 : 0);
 
-  return { date: d, content, model: opts?.deep ? "deep" : "free" };
+  return { date: d, content, model: isDeep ? "deep" : "free" };
 }
 
 /** 首页用：命中实体的热度榜（近7天） */

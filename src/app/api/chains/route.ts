@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   return NextResponse.json({
     ok: true,
+    job: jobState("chains"),
     build: jobState("chains"),
     refresh: jobState("chains-refresh"),
   });
