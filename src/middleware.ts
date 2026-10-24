@@ -9,8 +9,8 @@ import { NextRequest, NextResponse } from "next/server";
  * 写库仍在 RootLayout 的 recordVisit() 里做。
  */
 export function middleware(req: NextRequest) {
-  const mode = req.headers.get("sec-fetch-mode");
-  const isNavigate = !mode || mode === "navigate";
+  // 只对真实浏览器导航发 ID（探针/curl 不带 sec-fetch-mode，不发，省得刷假设备）
+  const isNavigate = req.headers.get("sec-fetch-mode") === "navigate";
   const existing = req.cookies.get("wl_vid")?.value;
 
   const vid = existing ?? crypto.randomUUID();

@@ -25,14 +25,20 @@ export function maskIp(ip: string): string {
 export async function recordVisit(): Promise<void> {
   try {
     const h = await headers();
-    // 预取 / RSC 数据请求不计——next/link 的 prefetch 会被误记成大量 PV
+    // 只记真实浏览器导航：
+    // - sec-fetch-mode: navigate 是浏览器发页面请求时的固定标记；探针/curl/RSC 预取都不带或不是它。
+    //   漏掉这个判断会让平台存活探针（每几十秒 GET / 一次、不带 cookie）被当成"新设备"，
+    //   一夜能刷出几千个假访客。
+    // - 真实浏览器 UA 一律以 Mozilla 开头（Chrome/Safari/Firefox/Edge/移动端皆是），
+    //   探针（Go-http-client/空/okhttp 等）不是——双保险。
     const mode = h.get("sec-fetch-mode");
-    if (mode && mode !== "navigate") return;
+    if (mode !== "navigate") return;
+    const ua = (h.get("user-agent") ?? "").slice(0, 120);
+    if (!ua.startsWith("Mozilla")) return;
     const fwd = (h.get("x-forwarded-for") ?? "").split(",")[0].trim();
     const ip = fwd || h.get("x-real-ip") || "unknown";
     // 路径由 middleware 注入（x-wl-path）；旧回退仅兜底
     const path = h.get("x-wl-path") || (h.get("next-url") || h.get("x-invoke-path") || "/").split("?")[0] || "/";
-    const ua = (h.get("user-agent") ?? "").slice(0, 120);
     // 匿名访客 ID：middleware 对没有 wl_vid cookie 的导航请求下发并注入此头
     const vid = h.get("x-wl-vid") ?? "";
     getDb().prepare(`INSERT INTO visits (ip, path, ua, vid) VALUES (?, ?, ?, ?)`).run(ip, path, ua, vid);

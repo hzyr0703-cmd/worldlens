@@ -300,6 +300,14 @@ function initSchema(db: DatabaseSync) {
   } catch {
     /* 已有重复数据时建索引会失败，不阻塞启动；清理后下次启动自动生效 */
   }
+  try {
+    // 访问统计清洗：旧版把平台存活探针也记了（不带 cookie，每次都算"新设备"，
+    // 一夜刷出几千假访客）。真实浏览器 UA 一律以 Mozilla 开头，探针不是。
+    // recordVisit 现已双重过滤，这里清掉历史脏数据。
+    db.exec(`DELETE FROM visits WHERE ua NOT LIKE 'Mozilla%'`);
+  } catch {
+    /* 清理失败不影响启动 */
+  }
 }
 
 /** 简易内容指纹：标题去空白小写 + 截断，用于跨源去重 */
