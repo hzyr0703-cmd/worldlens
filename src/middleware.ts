@@ -1,14 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * 给每个浏览器发一个匿名访客 ID（wl_vid，一年有效）。
- * 访问统计用它按"设备"去重——同一台设备换网络（Wi-Fi ↔ 流量）不再被算成两个访客，
- * 比纯 IP 口径更接近真实人数。ID 是随机 UUID，不含任何身份信息。
+ * 1. 给每个浏览器发一个匿名访客 ID（wl_vid，一年有效）——访问统计按"设备"去重。
+ * 2. API 简易限流——公开站点的 /api/* 会被爬虫盯上，120 次/分钟封顶，
+ *    正常使用（页面渲染 + LiveRefresh 轮询）远低于此。
  *
- * middleware 跑在 edge runtime（用不了 node:sqlite），所以这里只负责发 ID / 注入请求头，
- * 写库仍在 RootLayout 的 recordVisit() 里做。
+ * middleware 跑在 edge runtime（用不了 node:sqlite），统计写库仍在 RootLayout 做。
  */
+
+// edge runtime 模块级 Map：单实例部署下即全站限流器
+const hits = new Map<string, { n: number; reset: number }>();
+
+function rateLimited(ip: string): boolean {
+  const now = Date.now();
+  const h = hits.get(ip);
+  if (!h || now > h.reset) {
+    hits.set(ip, { n: 1, reset: now + 60_000 });
+    return false;
+  }
+  h.n++;
+  // Map 防膨胀：超过 1 万个 IP 时清掉过期的（粗粒度，够用）
+  if (hits.size > 10_000) {
+    for (const [k, v] of hits) if (now > v.reset) hits.delete(k);
+  }
+  return h.n > 120;
+}
+
 export function middleware(req: NextRequest) {
+  const fwd = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim();
+  const ip = fwd || req.headers.get("x-real-ip") || "unknown";
+
+  // API 限流先于一切：防数据爬取与接口滥用
+  if (req.nextUrl.pathname.startsWith("/api/") && rateLimited(ip)) {
+    return new NextResponse(JSON.stringify({ ok: false, error: "too many requests" }), {
+      status: 429,
+      headers: { "Content-Type": "application/json", "Retry-After": "60" },
+    });
+  }
+
   // 只对真实浏览器导航发 ID（探针/curl 不带 sec-fetch-mode，不发，省得刷假设备）
   const isNavigate = req.headers.get("sec-fetch-mode") === "navigate";
   const existing = req.cookies.get("wl_vid")?.value;
