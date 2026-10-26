@@ -38,13 +38,21 @@ export const SEED_SOURCES: SeedSource[] = [
   { name: "金十数据·快讯", url: `${RSSHUB_BASE}/jin10`, tier: 1, category: "macro" },
   { name: "财新·最新", url: `${RSSHUB_BASE}/caixin/latest`, tier: 1, category: "macro" },
   { name: "第一财经", url: `${RSSHUB_BASE}/yicai/news`, tier: 1, category: "macro" },
+  // T1 权威财经深度（官方 RSS 直连，2026-10-26 实测可用）
+  { name: "华尔街见闻·文章", url: "https://dedicated.wallstreetcn.com/rss.xml", tier: 1, category: "macro" },
   // T2 行业/深度
   { name: "36氪", url: `${RSSHUB_BASE}/36kr/newsflashes`, tier: 2, category: "company" },
   { name: "量子位", url: "https://www.qbitai.com/feed", tier: 2, category: "company" },
   { name: "少数派", url: "https://sspai.com/feed", tier: 2, category: "company" },
+  // T2 中文科技/商业（官方 RSS 直连，2026-10-26 实测可用）
+  { name: "IT之家", url: "https://www.ithome.com/rss/", tier: 2, category: "company" },
+  { name: "爱范儿", url: "https://www.ifanr.com/feed", tier: 2, category: "company" },
+  { name: "雷峰网", url: "https://www.leiphone.com/feed", tier: 2, category: "company" },
+  { name: "极客公园", url: "https://www.geekpark.net/rss", tier: 2, category: "company" },
   // T3 观点侧
   { name: "雪球·今日话题", url: `${RSSHUB_BASE}/xueqiu/todaytopic`, tier: 3, category: "opinion" },
   { name: "阮一峰·科技爱好者周刊", url: "https://www.ruanyifeng.com/blog/atom.xml", tier: 3, category: "opinion" },
+  { name: "Solidot", url: "https://www.solidot.org/index.rss", tier: 3, category: "opinion" },
   // 海外 T1（直连）
   { name: "WSJ·Markets", url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml", tier: 1, category: "overseas" },
   { name: "CNBC·Business", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", tier: 1, category: "overseas" },
