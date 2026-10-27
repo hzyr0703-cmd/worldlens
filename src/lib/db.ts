@@ -229,17 +229,6 @@ function initSchema(db: DatabaseSync) {
       rating INTEGER NOT NULL,                  -- 1 again 2 hard 3 good 4 easy
       reviewed_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-
-    -- ===== v5: 访问统计（只记 IP/路径/UA，不含任何身份信息；公开页只展示掩码 IP）=====
-    CREATE TABLE IF NOT EXISTS visits (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      ip TEXT NOT NULL,
-      path TEXT NOT NULL DEFAULT '/',
-      ua TEXT DEFAULT '',
-      ts TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_visits_ts ON visits(ts DESC);
-    CREATE INDEX IF NOT EXISTS idx_visits_ip ON visits(ip);
   `);
 
   /* 旧库清理：把 fts5 虚拟表和挂在 items/nuggets 上的同步触发器拆掉。
@@ -278,8 +267,6 @@ function initSchema(db: DatabaseSync) {
     `ALTER TABLE articles ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'official'`,
     // 蒸馏队列标记：原先散落在 distill/pipeline 的 ensureDistilledColumn()，收归到统一迁移
     `ALTER TABLE items ADD COLUMN distilled INTEGER NOT NULL DEFAULT 0`,
-    // 访客去重的第二口径：按浏览器匿名 ID（middleware 下发 wl_vid），比 IP 更接近真实人数
-    `ALTER TABLE visits ADD COLUMN vid TEXT NOT NULL DEFAULT ''`,
     // 蒸馏临时失败计次：429/超时不再一刀切永久跳过，连续 3 次才放弃
     `ALTER TABLE items ADD COLUMN distill_attempts INTEGER NOT NULL DEFAULT 0`,
     // 简报版本标记：深度版（deep=1）不被每小时免费的"跟随重建"覆盖
@@ -305,10 +292,9 @@ function initSchema(db: DatabaseSync) {
     /* 已有重复数据时建索引会失败，不阻塞启动；清理后下次启动自动生效 */
   }
   try {
-    // 访问统计清洗：旧版把平台存活探针也记了（不带 cookie，每次都算"新设备"，
-    // 一夜刷出几千假访客）。真实浏览器 UA 一律以 Mozilla 开头，探针不是。
-    // recordVisit 现已双重过滤，这里清掉历史脏数据。
-    db.exec(`DELETE FROM visits WHERE ua NOT LIKE 'Mozilla%'`);
+    // 访问统计已下线（2026-10-27 应用户要求移除）：拆掉 visits 表及其索引，
+    // 明细数据不再保留
+    db.exec(`DROP TABLE IF EXISTS visits`);
   } catch {
     /* 清理失败不影响启动 */
   }
@@ -321,11 +307,9 @@ function initSchema(db: DatabaseSync) {
   }
   try {
     // 历史垃圾清理：10-21 那期 328 字 JSON 简报（校验逻辑上线前入库的废品）；
-    // 废弃的 recall 闪卡（对账台只处理 verify，死卡留在库里虚增"到期"计数）；
-    // 访问明细只留 90 天（统计用途，控制体积）
+    // 废弃的 recall 闪卡（对账台只处理 verify，死卡留在库里虚增"到期"计数）
     db.exec(`DELETE FROM digests WHERE length(content) < 400`);
     db.exec(`DELETE FROM review_cards WHERE kind = 'recall'`);
-    db.exec(`DELETE FROM visits WHERE ts < datetime('now', '-90 days')`);
   } catch {
     /* 清理失败不影响启动 */
   }
