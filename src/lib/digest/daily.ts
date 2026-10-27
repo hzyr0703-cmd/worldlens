@@ -226,6 +226,11 @@ C. 用户的认知原子库（用户长期保存、亲手沉淀的理解）
   }
 
   const isDeep = Boolean(opts?.deep);
+  // 校验下沉到 buildDigest 内部：cron 直调不走 API 层的 validateDigestBody，
+  // 没这行的话 LLM 返回空内容时会写进 53 字的垃圾简报并占住当日键位
+  if (content.trim().length < 400) {
+    throw new Error(`简报内容过短（${content.length} 字），疑似生成失败——已保留原有版本`);
+  }
   db.prepare(
     `INSERT INTO digests (date, content, stats, deep) VALUES (?, ?, ?, ?)
      ON CONFLICT(date) DO UPDATE SET content = excluded.content, stats = excluded.stats,
