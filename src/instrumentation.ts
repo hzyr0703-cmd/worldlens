@@ -80,7 +80,7 @@ export async function register() {
       try {
         const { getDb } = await import("@/lib/db");
         getDb()
-          .prepare(`INSERT INTO cron_log (run_date, ok, detail, ms) VALUES (date('now'), ?, ?, ?)`)
+          .prepare(`INSERT INTO cron_log (run_date, ok, detail, ms) VALUES (date('now','+8 hours'), ?, ?, ?)`)
           .run(ok ? 1 : 0, detail.slice(0, 200), Date.now() - started);
         getDb().exec("PRAGMA wal_checkpoint(TRUNCATE)"); // WAL 卫生
       } catch {
@@ -92,7 +92,7 @@ export async function register() {
       try {
         const { getDb } = await import("@/lib/db");
         getDb()
-          .prepare(`INSERT INTO cron_log (run_date, ok, detail, ms) VALUES (date('now'), 0, ?, ?)`)
+          .prepare(`INSERT INTO cron_log (run_date, ok, detail, ms) VALUES (date('now','+8 hours'), 0, ?, ?)`)
           .run(msg.slice(0, 200), Date.now() - started);
       } catch {
         /* ignore */
