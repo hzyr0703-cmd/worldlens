@@ -16,9 +16,9 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 const TABLES = [
-  "sources", "items", "entities", "claims", "edges", "digests", "cards",
+  "sources", "items", "entities", "claims", "edges", "digests",
   "nuggets", "nugget_links", "worldview_log", "articles", "quizzes",
-  "review_cards", "review_log", "llm_log", "prefs",
+  "review_cards", "review_log", "llm_log", "prefs", "cron_log", "visits",
 ];
 
 const [, , mode, arg, outArg] = process.argv;
