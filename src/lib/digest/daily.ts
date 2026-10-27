@@ -127,7 +127,10 @@ export async function buildDigest(date?: string, opts?: { deep?: boolean }): Pro
   let content: string;
 
   if (topics.length === 0) {
-    content = `# WorldLens 每日简报 · ${d}\n\n今日暂无匹配关注实体的信息。触发采集后重试。`;
+    // 今天没有主张 = 实体抽取还没跑到（dailyRun 采集段不含 extractPending，
+    // 要靠 quickIngest 补）。**绝不写库**——空态曾把已有的 3229 字好简报覆盖成 53 字，
+    // 且绕过 validateDigestBody。直接抛错，让调用方下一轮重试。
+    throw new Error(`今日（${d}）尚无主张数据，实体抽取未完成——跳过简报生成，等待下一轮`);
   } else if (llmEnabled) {
     const corpus = topics
       .map((t) => `## ${t.name}（${t.type}，${t.cnt}条）\n${fmtItems(t.items)}`)

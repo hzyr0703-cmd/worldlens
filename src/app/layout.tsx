@@ -5,7 +5,6 @@ import MotionLayer from "@/components/MotionLayer";
 import LiveRefresh from "@/components/LiveRefresh";
 import MobileMenu from "@/components/MobileMenu";
 import OfflineBanner from "@/components/OfflineBanner";
-import { recordVisit } from "@/lib/visits";
 
 export const metadata: Metadata = {
   title: "WorldLens · 认知复利引擎",
@@ -43,10 +42,7 @@ const NAV_GROUPS = [
 ];
 const NAV = NAV_GROUPS.flatMap((g) => g.items);
 
-export default async function RootLayout({ children }: LayoutProps<"/">) {
-  // 访问统计：导航请求（sec-fetch-mode: navigate）记一条 IP/路径，失败不阻塞渲染
-  await recordVisit();
-
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="zh-CN" className="h-full antialiased">
       <body className="min-h-full flex flex-col">

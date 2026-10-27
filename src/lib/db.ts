@@ -305,17 +305,18 @@ function initSchema(db: DatabaseSync) {
     /* 已有重复数据时建索引会失败，不阻塞启动；清理后下次启动自动生效 */
   }
   try {
-    // 访问统计清洗：旧版把平台存活探针也记了（不带 cookie，每次都算"新设备"，
-    // 一夜刷出几千假访客）。真实浏览器 UA 一律以 Mozilla 开头，探针不是。
-    // recordVisit 现已双重过滤，这里清掉历史脏数据。
-    db.exec(`DELETE FROM visits WHERE ua NOT LIKE 'Mozilla%'`);
+    // 访问统计已下线（2026-10-27）；visits 表保留建表语句以免老库报错，仅做留存清理
+    db.exec(`DELETE FROM visits WHERE ts < datetime('now', '-30 days')`);
   } catch {
     /* 清理失败不影响启动 */
   }
   try {
-    // 蒸馏失败回填：distilled=2 的行此前一刀切标记（含大量限流临时失败），
-    // 视为已失败一次；回填 attempts 后新逻辑可继续重试到 3 次上限
+    // 蒸馏失败回填：distilled=2 是旧逻辑一刀切标记的（含大量限流临时失败）。
+    // 标记为「已失败 1 次」，并把仍有余量的放回队列（attempts < 3）——
+    // 只设 attempts 不重置 distilled 的话，这 565 条永远进不了队列，
+    // 新加的重试逻辑等于空转。
     db.exec(`UPDATE items SET distill_attempts = 1 WHERE distilled = 2 AND distill_attempts = 0`);
+    db.exec(`UPDATE items SET distilled = 0 WHERE distilled = 2 AND distill_attempts < 3`);
   } catch {
     /* 回填失败不影响启动 */
   }

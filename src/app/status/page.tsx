@@ -1,5 +1,4 @@
 import { getDb } from "@/lib/db";
-import { maskIp, visitStats } from "@/lib/visits";
 import PageHead from "@/components/PageHead";
 
 export const dynamic = "force-dynamic";
@@ -78,9 +77,6 @@ export default async function StatusPage() {
   const runDays = new Set(runs.filter((r) => r.ok === 1).map((r) => r.run_date));
   const coverage = last7.map((d) => ({ day: d.day, ok: runDays.has(d.day) }));
 
-  const vs = visitStats();
-  const maxDayPv = Math.max(1, ...vs.days.map((d) => d.pv));
-  const maxPathPv = Math.max(1, ...vs.topPaths.map((p) => p.pv));
 
   const health = [
     {
@@ -151,87 +147,6 @@ export default async function StatusPage() {
             唤醒后 60 秒内会自动补跑当日链路，因此数据断档不会超过一次访问间隔。
           </div>
         )}
-
-        {/* 访问统计 */}
-        <div className="mt-10 panel p-6">
-          <div className="flex flex-wrap items-baseline gap-3">
-            <div className="sec-index mono">访问 · 有多少人来过</div>
-            <span className="text-[11.5px] text-zinc-400">
-              按匿名设备 ID 去重（同一设备换网络不重复计数）· IP 口径仅作对照 · 预取请求不计 · IP 掩码展示
-            </span>
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { label: "累计访客（设备）", v: vs.uniqueTotal, note: `另有 ${vs.uniqueIpTotal} 个独立 IP` },
-              { label: "今日访客（设备）", v: vs.uniqueToday, note: `独立 IP ${vs.uniqueIpToday}` },
-              { label: "累计浏览（PV）", v: vs.pvTotal, note: "所有页面请求" },
-              { label: "今日浏览", v: vs.pvToday, note: "北京时间今天" },
-            ].map((x) => (
-              <div key={x.label} className="rounded-xl border border-zinc-100 bg-zinc-50/60 p-4">
-                <div className="text-[11.5px] font-medium text-zinc-500">{x.label}</div>
-                <div className="mt-1 text-[24px] font-semibold tracking-[-0.02em] tabular-nums">{x.v}</div>
-                <div className="text-[11px] text-zinc-400">{x.note}</div>
-              </div>
-            ))}
-          </div>
-
-          {vs.days.length > 0 && (
-            <div className="mt-6">
-              <div className="text-[12px] font-medium text-zinc-500">近 7 天（每日 PV，条上标访客设备数）</div>
-              <div className="mt-3 flex items-end gap-2 h-24">
-                {[...vs.days].reverse().map((d) => (
-                  <div key={d.day} className="flex flex-1 flex-col items-center gap-1">
-                    <span className="mono text-[10px] text-zinc-400 tabular-nums">{d.ipv}</span>
-                    <div
-                      className="w-full rounded-t bg-[#00b8d4]/70 min-h-[3px]"
-                      style={{ height: `${Math.max(4, (d.pv / maxDayPv) * 64)}px` }}
-                      title={`${d.day} · ${d.pv} 次浏览 / ${d.ipv} 台设备 / ${d.ips} 个 IP`}
-                    />
-                    <span className="mono text-[9.5px] text-zinc-400">{d.day.slice(5)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-zinc-100 pt-4">
-            <div>
-              <div className="text-[12px] font-medium text-zinc-500 mb-2">最常被看的页面</div>
-              {vs.topPaths.length === 0 ? (
-                <p className="text-[13px] text-zinc-400">还没有记录</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {vs.topPaths.map((p) => (
-                    <div key={p.path} className="flex items-center gap-2 text-[12px]">
-                      <span className="mono text-zinc-600 w-[110px] truncate">{p.path}</span>
-                      <div className="flex-1 h-2 rounded bg-zinc-100 overflow-hidden">
-                        <div className="h-full bg-[#00b8d4]/60" style={{ width: `${(p.pv / maxPathPv) * 100}%` }} />
-                      </div>
-                      <span className="mono text-zinc-400 tabular-nums shrink-0">{p.pv}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div>
-              <div className="text-[12px] font-medium text-zinc-500 mb-2">最近来访（IP 已掩码）</div>
-              {vs.recent.length === 0 ? (
-                <p className="text-[13px] text-zinc-400">还没有记录</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {vs.recent.map((r, i) => (
-                    <div key={i} className="flex items-center gap-2 text-[12px]">
-                      <span className="mono text-zinc-500 w-[110px] shrink-0">{maskIp(r.ip)}</span>
-                      <span className="mono text-zinc-400 text-[10.5px] w-[82px] shrink-0">{r.ts.slice(5, 16)}</span>
-                      <span className="text-zinc-600 flex-1 truncate">{r.path}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
 
         <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="panel p-6">

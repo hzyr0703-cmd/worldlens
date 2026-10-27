@@ -29,11 +29,15 @@ export async function register() {
       const ing = await runJob("ingest", async () => {
         const { ingestAll } = await import("@/lib/ingest/rss");
         const { ingestCninfo } = await import("@/lib/ingest/cninfo");
+        const { extractPending } = await import("@/lib/extract/entities");
         const a = await ingestAll();
         await ingestCninfo();
+        // 关键：必须抽实体/主张。缺这一步，简报段查「今日 claims」为 0，
+        // 会走空态分支（曾把好简报覆盖成 53 字）。
+        const ex = await extractPending();
         const fetched = a.reduce((s, x) => s + x.fetched, 0);
         const inserted = a.reduce((s, x) => s + x.inserted, 0);
-        return `采集 ${fetched}/入${inserted}`;
+        return `采集 ${fetched}/入${inserted} · 抽实体 ${ex.processed}`;
       });
 
       // ── 供给段 ──
