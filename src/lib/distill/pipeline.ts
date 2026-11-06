@@ -157,6 +157,25 @@ export type DistillResult = {
   contradicted: number;
 };
 
+/** 蒸馏专用 chat：主模型限流时自动切备用 provider（llm.json 里两家配额独立）。
+ *  单批只产 ≤4 个原子，6000 tokens 够用；12000 会把 TPM 配额吃满。 */
+async function distillChat(text: string, temperature: number, purpose: string): Promise<string> {
+  const primary = process.env.DISTILL_MODEL || "sensenova/deepseek-v4-flash";
+  const fallback = process.env.DISTILL_FALLBACK_MODEL || "zhipu/glm-4-flash";
+  const opts = { maxTokens: 6000, temperature, purpose };
+  try {
+    return await chat(DISTILL_SYSTEM, text, { ...opts, model: primary });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/429|rate.?limit|rpm|tpm|quota|timeout|timed?\s*out/i.test(msg)) throw e;
+    return await chat(DISTILL_SYSTEM, text, {
+      ...opts,
+      purpose: `${purpose}_fallback`,
+      model: fallback,
+    });
+  }
+}
+
 export async function distillDaily(date?: string, limit = 400): Promise<DistillResult> {
   if (!llmEnabled) throw new Error("LLM 未配置（.env 缺 LLM_BASE_URL/LLM_API_KEY）");
   const db = getDb();
@@ -193,13 +212,13 @@ export async function distillDaily(date?: string, limit = 400): Promise<DistillR
 
     let candidates: RawNugget[] = [];
     try {
-      // 单批只产出 ≤4 个原子，6000 tokens 够用——12000 会把 TPM 配额吃满，
-      // 密集蒸馏时网关直接 429（实测失败率 50%）
-      const raw = await chat(DISTILL_SYSTEM, text, { maxTokens: 6000, temperature: 0.2, purpose: "distill", model: process.env.DISTILL_MODEL || "sensenova/deepseek-v4-flash" });
+      // 主网关配额打满（429）时切备用 provider 分担——两个供应商配额独立，
+      // 能把密集蒸馏的等待时间砍掉一半；低质输出仍会被 isQualityAtom 挡掉。
+      const raw = await distillChat(text, 0.2, "distill");
       candidates = parseJsonArray<RawNugget>(raw).slice(0, 4); // 偏精：单批上限 4
       if (candidates.length === 0) {
         // JSON 失败重试一次（温度+0.2）
-        const raw2 = await chat(DISTILL_SYSTEM, text, { maxTokens: 6000, temperature: 0.4, purpose: "distill_retry", model: process.env.DISTILL_MODEL || "sensenova/deepseek-v4-flash" });
+        const raw2 = await distillChat(text, 0.4, "distill_retry");
         candidates = parseJsonArray<RawNugget>(raw2).slice(0, 4);
       }
     } catch (e) {
