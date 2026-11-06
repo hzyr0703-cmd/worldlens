@@ -101,8 +101,8 @@ async function fetchSourceOnce(source: {
       if (dup) continue;
 
       db.prepare(
-        `INSERT INTO items (source_id, guid, title, content, link, tier, published_at, content_hash)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO items (source_id, guid, title, content, link, tier, published_at, content_hash, distilled)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         source.id,
         guid,
@@ -111,7 +111,10 @@ async function fetchSourceOnce(source: {
         link,
         source.tier,
         published,
-        hash
+        hash,
+        // 从源头防积压：125 字级短快讯蒸不出认知原子（信息已由 extract 转 claims），
+        // 直接标记已消化；T0 官方源一律保留蒸馏（公告是最硬证据）
+        source.tier > 0 && (content || title).length < 400 ? 1 : 0
       );
       inserted++;
     }

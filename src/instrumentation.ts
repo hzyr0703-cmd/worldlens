@@ -135,15 +135,33 @@ export async function register() {
         if (inserted + cnAdded > 0) {
           await extractPending();
         }
-        // 蒸馏跟随：手动蒸馏在跑时自动跳过（同名互斥）
+        // ── 积压自动消化 ──
+        // 原实现每 20 分钟只蒸 40 条，采集 ~600 条/天 → 积压单调膨胀（曾涨到 13153）。
+        // 现在按积压量自适应：>3000 条跑 3 轮×400、>800 跑 2 轮、否则 1 轮。
+        // 每轮独占 job 名「distill」，与手动 /api/distill、dailyRun 互斥，杜绝双写；
+        // 实例休眠唤醒后本轮会重新触发，所以长任务被中断也能续上，直到清零。
         try {
           const { runJob } = await import("@/lib/background");
-          const dr = await runJob("distill", async () => {
-            const { distillDaily } = await import("@/lib/distill/pipeline");
-            const r = await distillDaily(undefined, 40);
-            return `蒸馏 ${r.scanned} → +${r.created} 原子`;
-          });
-          if (!dr.skipped) extra += ` · ${dr.detail}`;
+          const { getDb } = await import("@/lib/db");
+          const backlogRow = getDb()
+            .prepare(`SELECT COUNT(*) c FROM items WHERE distilled = 0`)
+            .get() as unknown as { c: number };
+          const backlog = backlogRow?.c ?? 0;
+          // 轮数不能贪多：多个 LLM 任务（采集抽取/建链/简报）共享同一网关配额，
+          // 3 轮并发会把 RPM/TPM 打满，实测 429 失败率 50%。高积压时 2 轮即可。
+          const rounds = backlog > 3000 ? 2 : 1;
+          let drained = 0;
+          for (let i = 0; i < rounds; i++) {
+            const dr = await runJob("distill", async () => {
+              const { distillDaily } = await import("@/lib/distill/pipeline");
+              const r = await distillDaily(undefined, 400);
+              drained += r.scanned;
+              return `蒸馏 ${r.scanned} → +${r.created} 原子`;
+            });
+            if (dr.skipped) break; // 手动蒸馏在跑，让出，下一轮再来
+            if (!dr.ok) break;     // LLM 持续失败时别空转烧配额
+          }
+          if (drained > 0) extra += ` · 消化积压 ${drained} 条（剩 ${Math.max(0, backlog - drained)}）`;
         } catch {
           /* 蒸馏失败不阻塞采集 */
         }

@@ -164,13 +164,17 @@ export async function distillDaily(date?: string, limit = 400): Promise<DistillR
   const result: DistillResult = { batches: 0, scanned: 0, skipped: 0, created: 0, links: 0, reinforced: 0, contradicted: 0 };
 
   // ---- Step 1: 取未蒸馏 items ----
-  // 优先级：巨潮公告（T0 最硬证据）> 其它；同类按新到旧（旧闻价值衰减，新信息优先入链）
+  // 优先级：巨潮公告（T0 最硬证据）> 长文 ≥400 字（能蒸出机制/判断）> 短快讯。
+  // 短快讯不跳过（否则永远清不完积压），只是排后；同类按新到旧（旧闻价值衰减）。
   const rows = db
     .prepare(
       `SELECT i.id, i.title, i.content, i.tier FROM items i
        LEFT JOIN sources s ON s.id = i.source_id
        WHERE date(COALESCE(i.published_at, i.fetched_at)) <= ? AND i.distilled = 0
-       ORDER BY CASE WHEN s.name = '巨潮·公告' THEN 0 ELSE 1 END, i.id DESC
+       ORDER BY CASE WHEN s.name = '巨潮·公告' THEN 0
+                     WHEN length(i.content) >= 400 THEN 1
+                     ELSE 2 END,
+                i.id DESC
        LIMIT ?`
     )
     .all(d, limit) as unknown as { id: number; title: string; content: string; tier: number }[];
@@ -189,11 +193,13 @@ export async function distillDaily(date?: string, limit = 400): Promise<DistillR
 
     let candidates: RawNugget[] = [];
     try {
-      const raw = await chat(DISTILL_SYSTEM, text, { maxTokens: 12000, temperature: 0.2, purpose: "distill", model: process.env.DISTILL_MODEL || "sensenova/deepseek-v4-flash" });
+      // 单批只产出 ≤4 个原子，6000 tokens 够用——12000 会把 TPM 配额吃满，
+      // 密集蒸馏时网关直接 429（实测失败率 50%）
+      const raw = await chat(DISTILL_SYSTEM, text, { maxTokens: 6000, temperature: 0.2, purpose: "distill", model: process.env.DISTILL_MODEL || "sensenova/deepseek-v4-flash" });
       candidates = parseJsonArray<RawNugget>(raw).slice(0, 4); // 偏精：单批上限 4
       if (candidates.length === 0) {
         // JSON 失败重试一次（温度+0.2）
-        const raw2 = await chat(DISTILL_SYSTEM, text, { maxTokens: 12000, temperature: 0.4, purpose: "distill_retry", model: process.env.DISTILL_MODEL || "sensenova/deepseek-v4-flash" });
+        const raw2 = await chat(DISTILL_SYSTEM, text, { maxTokens: 6000, temperature: 0.4, purpose: "distill_retry", model: process.env.DISTILL_MODEL || "sensenova/deepseek-v4-flash" });
         candidates = parseJsonArray<RawNugget>(raw2).slice(0, 4);
       }
     } catch (e) {
@@ -216,6 +222,11 @@ export async function distillDaily(date?: string, limit = 400): Promise<DistillR
         }
         result.batches--; result.scanned -= giveUp; result.skipped += giveUp;
         console.error(`[distill] batch transient failure (kept ${ids.length - giveUp} for retry): ${msg.slice(0, 120)}`);
+        // 限流是配额窗口级的：下一批立刻再打只会继续 429。冷却 45 秒让窗口重置，
+        // 比连续失败 16 批更省时间也省配额。
+        if (/429|rate.?limit|rpm|tpm|quota/i.test(msg)) {
+          await new Promise((res) => setTimeout(res, 45_000));
+        }
       } else {
         db.prepare(`UPDATE items SET distilled = 2 WHERE id IN (${ph})`).run(...ids);
         result.batches--; result.scanned -= ids.length; result.skipped += ids.length;

@@ -120,9 +120,11 @@ export async function chat(
   const temperature = r.temperature ?? opts?.temperature ?? 0.2;
 
   try {
-    // 网关有 RPM/TPM 配额（429 / code 8 / 1305）：指数退避重试，否则批量任务会大面积失败
+    // 网关有 RPM/TPM 配额（429 / code 8 / 1305）：指数退避重试，否则批量任务会大面积失败。
+    // 退避必须跨过配额重置窗口（按分钟计），4/12/25 秒太短：实测密集蒸馏时
+    // 半数的调用在 40 秒后仍以 429 告终，白烧时间。改为 10/30/60 秒。
     const RETRYABLE = /429|1305|rpm|tpm|rate.?limit|quota|访问量过大|busy/i;
-    const DELAYS = [4000, 12000, 25000];
+    const DELAYS = [10000, 30000, 60000];
     let lastErr: Error | null = null;
 
     for (let attempt = 0; attempt <= DELAYS.length; attempt++) {
