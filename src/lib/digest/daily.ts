@@ -192,23 +192,28 @@ C. 用户的认知原子库（用户长期保存、亲手沉淀的理解）
         maxTokens: opts?.deep ? 20000 : 16000,
         temperature: 0.35,
         purpose: "digest_v3",
-        // 分级路由：日常用免费 glm-4-flash；深度版优先 glm-4.7-flash（免费推理版）
+        // 分级路由：主用智谱 glm-4.6（稳，16k 输出实测可用），兜底 sensenova 免费通道
+        // 2026-11-19 事故：默认写死的 glm-5.2 已从 sensenova 下线（400 no available model instance），
+        // 而 sensenova 的 glm 系列同时打满 tpm/rpm（429 code 8），日常版没有任何兜底直接挂掉。
         model: opts?.deep
-          ? process.env.DIGEST_DEEP_MODEL || "sensenova/glm-5.2"
-          : process.env.DIGEST_MODEL || "sensenova/glm-5.2",
+          ? process.env.DIGEST_DEEP_MODEL || "zhipu/glm-4.6"
+          : process.env.DIGEST_MODEL || "zhipu/glm-4.6",
       }
     ).catch(async (e: unknown) => {
-      // 4.7-flash 免费额度限流（1305）时自动降级到 glm-4.6（付费但稳定）
-      if (opts?.deep && e instanceof Error && /1305|429|访问量过大/.test(e.message)) {
-        console.warn("[digest] deep model rate-limited, falling back to glm-4.6");
-        return chat(promptText, material, {
-          maxTokens: 16000,
-          temperature: 0.35,
-          purpose: "digest_deep_fallback",
-          model: process.env.DIGEST_DEEP_FALLBACK || "sensenova/deepseek-v4-flash",
-        });
-      }
-      throw e;
+      // 模型下线（400 / code 9）与限流（429 / 1305 / 访问量过大）都走兜底，不能只兜 deep
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/no available model instance|1305|429|访问量过大|rate_limit/i.test(msg)) throw e;
+      const fallbackModel =
+        (opts?.deep ? process.env.DIGEST_DEEP_FALLBACK : process.env.DIGEST_FALLBACK) ||
+        process.env.DIGEST_FALLBACK ||
+        "sensenova/deepseek-v4-flash";
+      console.warn(`[digest] 主模型不可用，兜底到 ${fallbackModel}：${msg.slice(0, 160)}`);
+      return chat(promptText, material, {
+        maxTokens: 16000,
+        temperature: 0.35,
+        purpose: "digest_fallback",
+        model: fallbackModel,
+      });
     });
     const check = validateDigestBody(content);
     if (!check.ok) {
