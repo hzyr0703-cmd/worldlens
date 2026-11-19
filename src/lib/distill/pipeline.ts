@@ -158,11 +158,12 @@ export type DistillResult = {
 };
 
 /** 蒸馏专用 chat：主模型限流时自动切备用 provider（llm.json 里两家配额独立）。
- *  单批只产 ≤4 个原子，6000 tokens 够用；12000 会把 TPM 配额吃满。 */
+ *  maxTokens 必须 ≥10000：deepseek-v4-flash 是推理模型，reasoning 与 content 共享额度，
+ *  6000 时 reasoning 吃满、content 为空（近 7 天 139/1438 次失败，9.7%）。 */
 async function distillChat(text: string, temperature: number, purpose: string): Promise<string> {
   const primary = process.env.DISTILL_MODEL || "sensenova/deepseek-v4-flash";
   const fallback = process.env.DISTILL_FALLBACK_MODEL || "zhipu/glm-4-flash";
-  const opts = { maxTokens: 6000, temperature, purpose };
+  const opts = { maxTokens: 10000, temperature, purpose };
   try {
     return await chat(DISTILL_SYSTEM, text, { ...opts, model: primary });
   } catch (e) {
